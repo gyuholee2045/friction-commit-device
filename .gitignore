@@ -1,0 +1,14 @@
+.pio/
+.vscode/
+*.o
+*.elf
+*.hex
+
+# Wokwi token (sensitive)
+.wokwi-token.local
+
+# Wokwi CLI binary (46MB, re-downloadable)
+wokwi-cli.exe
+
+# Claude Code internals
+.claude/

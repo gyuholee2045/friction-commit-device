@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Approval Gate — Three Conditions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root{ --ink:#2a3038; --ink-dim:#717a85; --ink-faint:#9aa3ad; --sans:'Inter',system-ui,sans-serif; }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{background:#eef1f6; color:var(--ink); font-family:var(--sans); font-weight:400; overflow:hidden; -webkit-font-smoothing:antialiased}
+  #gl{position:fixed; inset:0; z-index:1; display:block}
+  .seg{position:fixed; left:50%; top:4.5vh; transform:translateX(-50%); z-index:5; display:flex; gap:6px; pointer-events:auto}
+  .seg button{font:inherit; font-size:11px; letter-spacing:.06em; padding:7px 13px; border-radius:999px; border:1px solid rgba(42,48,56,0.18); background:rgba(255,255,255,0.55); color:var(--ink-dim); cursor:pointer; transition:background .2s,color .2s,border-color .2s}
+  .seg button.on{background:var(--ink); color:#fff; border-color:var(--ink)}
+  .info{position:fixed; left:0; right:0; top:0; z-index:3; display:flex; flex-direction:column; align-items:center; gap:8px; padding:13vh 24px 0; text-align:center; pointer-events:none}
+  .eyebrow{font-size:11px; letter-spacing:.28em; text-transform:uppercase; color:var(--ink-faint)}
+  .ititle{font-size:21px; font-weight:500; line-height:1.3; max-width:520px}
+  .isub{font-size:14px; color:var(--ink-dim); max-width:430px; line-height:1.5}
+  .zone{position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); z-index:3; pointer-events:none}
+  .zone .z{font-size:11px; letter-spacing:.2em; text-transform:uppercase; color:var(--ink-dim); transition:color .4s}
+  .ui{position:fixed; left:0; right:0; bottom:0; z-index:3; display:flex; justify-content:center; padding:5vh 24px; text-align:center; pointer-events:none}
+  .reveal{font-size:18px; line-height:1.55; min-height:52px; max-width:460px; color:var(--ink); opacity:.92; transition:opacity .4s ease}
+  #hit{position:fixed; left:50%; top:50%; width:300px; height:300px; transform:translate(-50%,-50%); border-radius:50%; z-index:4; cursor:pointer; touch-action:none}
+  #basicSend{position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); z-index:4; display:none; font:inherit; font-size:14px; font-weight:500; padding:12px 24px; border-radius:8px; border:1px solid var(--ink); background:var(--ink); color:#fff; cursor:pointer}
+  .stepbar{position:fixed; left:50%; bottom:15vh; transform:translateX(-50%); z-index:3; display:flex; gap:4px; pointer-events:none}
+  .stepbar span{display:block; width:80px; height:2px; border-radius:2px; background:rgba(0,0,0,0.22); overflow:hidden}
+  .stepbar i{display:block; height:100%; width:0%; background:rgba(255,255,255,0.95); border-radius:2px}
+  .dialog{position:fixed; inset:0; z-index:6; display:none; align-items:center; justify-content:center; background:rgba(20,24,32,0.16)}
+  .dialog .box{background:#fff; border-radius:16px; padding:24px 26px; max-width:360px; width:88%; box-shadow:0 16px 50px rgba(20,30,50,0.18)}
+  .dialog h3{font-size:16px; font-weight:500; margin:0 0 12px}
+  .dialog ul{list-style:none; margin:0 0 18px; font-size:13px; color:var(--ink-dim); line-height:1.8}
+  .dialog .row{display:flex; gap:8px; justify-content:flex-end}
+  .dialog button{font:inherit; font-size:13px; padding:9px 16px; border-radius:9px; border:1px solid rgba(42,48,56,0.2); background:#fff; color:var(--ink); cursor:pointer}
+  .dialog button.primary{background:var(--ink); color:#fff; border-color:var(--ink)}
+  .fallback{position:fixed; inset:0; z-index:7; display:none; align-items:center; justify-content:center; color:#888; font-size:14px; padding:40px; text-align:center}
+</style>
+</head>
+<body>
+  <canvas id="gl"></canvas>
+  <div class="seg" id="seg">
+    <button data-c="A">No friction</button>
+    <button data-c="B">Screen friction</button>
+    <button data-c="C">Tangible</button>
+  </div>
+  <div class="info">
+    <div class="eyebrow">The Approval Gate</div>
+    <h1 class="ititle">An AI is about to send an email for you.</h1>
+    <p class="isub">Three ways to meet that moment. Try each.</p>
+  </div>
+  <div class="zone"><span class="z" id="zone">Hold to stay</span></div>
+  <div class="stepbar" id="stepbar"><span><i></i></span><span><i></i></span><span><i></i></span></div>
+  <button id="basicSend">Send to 340 people</button>
+  <div class="ui"><div class="reveal" id="reveal">Hold to see who it reaches, then decide.</div></div>
+  <div id="hit"></div>
+  <div class="dialog" id="dialog"><div class="box">
+    <h3>Send to 340 people?</h3>
+    <ul>
+      <li>Reaches 340 people</li>
+      <li>12 external · 3 executives you can’t reply to</li>
+      <li>This can’t be undone</li>
+    </ul>
+    <div class="row"><button id="dlgCancel">Cancel</button><button class="primary" id="dlgOk">Send</button></div>
+  </div></div>
+  <div class="fallback" id="fallback">This experience needs WebGL.</div>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+
+const reveal=document.getElementById('reveal'), zone=document.getElementById('zone'), hit=document.getElementById('hit');
+const basicSend=document.getElementById('basicSend');
+const stepFills=Array.prototype.slice.call(document.querySelectorAll('#stepbar i'));
+const SEGS=[
+  {label:'Reach',      color:'#5a6a8a', text:'This reaches 340 people.'},
+  {label:'Recipients', color:'#5a6a8a', text:'12 are external. 3 are executives you can’t reply to.'},
+  {label:'No undo',    color:'#3a47c0', text:'Finish, and it goes. There is no taking it back.'}
+];
+const ABORTS=[
+  'It’s okay. Nothing went out.',
+  'You stepped back. It’s still just a draft.',
+  'Good pause. No one received anything.',
+  'You let go, and that was the right call.',
+  'Nothing happened. You can always send it later.',
+  'Take your time. It’ll be here when you’re ready.'
+];
+let abortIx=0;
+function segDur(){ return [1200,1200,2000+Math.min(streak,4)*500]; }
+function stageOf(p){ return p<0.30?0:p<0.60?1:2; }
+function prog(el,d){ const T0=d[0],T1=d[0]+d[1];
+  if(el<T0) return 0.30*(el/d[0]); if(el<T1) return 0.30+0.30*((el-T0)/d[1]); return 0.60+0.40*Math.min((el-T1)/d[2],1); }
+function setText(el,t){ el.style.opacity='0'; setTimeout(()=>{el.textContent=t; el.style.opacity='.92';},180); }
+
+function softTex(){ const s=128,c=document.createElement('canvas'); c.width=c.height=s; const g=c.getContext('2d');
+  const rad=g.createRadialGradient(s/2,s/2,0,s/2,s/2,s/2);
+  rad.addColorStop(0,'rgba(255,255,255,1)'); rad.addColorStop(0.4,'rgba(255,255,255,0.5)'); rad.addColorStop(1,'rgba(255,255,255,0)');
+  g.fillStyle=rad; g.fillRect(0,0,s,s); return new THREE.CanvasTexture(c); }
+
+const STOPS=['#2730c6','#5a3ad0','#2f8fd0'].map(h=>new THREE.Color(h));
+function colorAt(f){ f=(f%1+1)%1; const n=STOPS.length, x=f*n, i=Math.floor(x), t=x-i; return STOPS[i%n].clone().lerp(STOPS[(i+1)%n],t); }
+
+const R=0.48, SMOKE=54;
+let renderer,scene,camera,composer,ripplePass,torus,mat,core,clock,group,smoke,smokePos,smokeMat;
+let blobGroup,blobOuter,blobInner;
+const bubbles=[], smokeVel=[];
+let state='idle', press=0, fillV=0, holdStart=0, spreadStart=0, streak=0, lastStage=-1, cond='C', hoverV=0, aTimer=0;
+let rippleActive=false, rippleT=0;
+const pointer={x:0,y:0}, rot={x:0,y:0};
+
+function outerShader(material, ringR, amp){
+  material.onBeforeCompile=(sh)=>{
+    sh.uniforms.uTime={value:0}; sh.uniforms.uFill={value:0}; material.userData.sh=sh;
+    sh.vertexShader='uniform float uTime;uniform float uFill;\n'+sh.vertexShader;
+    sh.vertexShader=sh.vertexShader.replace('#include <begin_vertex>',
+      `#include <begin_vertex>
+       float w=sin(position.x*6.0+uTime*0.9)*0.45+sin(position.y*7.0+uTime*1.3)*0.34+sin(position.z*5.0+uTime*0.7)*0.4
+              +sin(position.x*15.0-uTime*1.7)*0.18+sin(position.y*18.0+uTime*1.2)*0.15+sin(position.z*13.0+uTime*1.5)*0.13;
+       vec3 rdir=normalize(vec3(position.x,position.y,0.0001));
+       vec3 outw=normalize(position-rdir*${ringR.toFixed(3)});
+       float side=dot(outw,rdir);
+       float wr=w*(${amp.toFixed(3)}*(side>0.0?1.0:0.25))*(1.0-uFill*0.85);
+       transformed+=normal*wr + outw*(uFill*0.11*(side>0.0?1.0:0.4));
+       transformed*=(1.0+uFill*0.06);`);
+  };
+}
+function coreShader(material, ringR, amp){
+  material.onBeforeCompile=(sh)=>{
+    sh.uniforms.uTime={value:0}; sh.uniforms.uThin={value:0}; material.userData.sh=sh;
+    sh.vertexShader='uniform float uTime;uniform float uThin;\n'+sh.vertexShader;
+    sh.vertexShader=sh.vertexShader.replace('#include <begin_vertex>',
+      `#include <begin_vertex>
+       float w=sin(position.x*7.0+uTime*1.0)*0.4+sin(position.y*8.0+uTime*1.3)*0.3+sin(position.z*6.0+uTime*0.8)*0.35;
+       vec3 rdir=normalize(vec3(position.x,position.y,0.0001));
+       vec3 toC=rdir*${ringR.toFixed(3)}-position;
+       transformed+=toC*uThin+normal*w*(${amp.toFixed(3)}*(1.0-uThin));`);
+  };
+}
+// blob (B): organic sphere wobble that intensifies on hover (uReact)
+function blobShader(material, amp){
+  material.onBeforeCompile=(sh)=>{
+    sh.uniforms.uTime={value:0}; sh.uniforms.uReact={value:0}; material.userData.sh=sh;
+    sh.vertexShader='uniform float uTime;uniform float uReact;\n'+sh.vertexShader;
+    sh.vertexShader=sh.vertexShader.replace('#include <begin_vertex>',
+      `#include <begin_vertex>
+       float w=sin(position.x*3.0+uTime*0.9)*0.5+sin(position.y*3.6+uTime*1.2)*0.4+sin(position.z*2.8+uTime*0.7)*0.45
+              +sin(position.x*8.0-uTime*1.6)*0.18+sin(position.y*9.0+uTime*1.1)*0.15+sin(position.z*7.0+uTime*1.3)*0.13
+              +sin(position.x*16.0+uTime*2.0)*0.08+sin(position.y*18.0-uTime*1.8)*0.07;
+       transformed+=normal*w*(${amp.toFixed(3)}*(1.0+uReact*1.2));`);
+  };
+}
+
+const RippleShader={
+  uniforms:{ tDiffuse:{value:null}, uTime:{value:0}, uActive:{value:0}, uAspect:{value:1} },
+  vertexShader:`varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+  fragmentShader:`
+    uniform sampler2D tDiffuse; uniform float uTime; uniform float uActive; uniform float uAspect; varying vec2 vUv;
+    void main(){ vec2 uv=vUv; float dark=0.0;
+      if(uActive>0.5){ vec2 d=uv-vec2(0.5); d.x*=uAspect; float dist=length(d);
+        float front=uTime*0.55; float edge=smoothstep(0.18,0.0,abs(dist-front)); float decay=exp(-uTime*0.55);
+        float wave=sin((dist-front)*42.0)*edge*0.09*decay; vec2 dir=dist>0.0001?normalize(d):vec2(0.0); uv+=dir*wave;
+        dark=edge*decay*0.10; }
+      gl_FragColor=vec4(texture2D(tDiffuse,uv).rgb-dark,1.0); }`
+};
+
+try { init(); animate(); } catch(e){ const f=document.getElementById('fallback'); f.style.display='flex'; f.textContent='Error: '+(e&&e.message?e.message:e); console.error(e); }
+
+function init(){
+  const canvas=document.getElementById('gl');
+  renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setSize(innerWidth,innerHeight);
+  renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.08;
+  scene=new THREE.Scene(); scene.background=new THREE.Color(0xeef1f6);
+  camera=new THREE.PerspectiveCamera(30,innerWidth/innerHeight,0.1,100); camera.position.set(0,0,4.4);
+  const pmrem=new THREE.PMREMGenerator(renderer);
+  scene.environment=pmrem.fromScene(new RoomEnvironment(),0.04).texture;
+  const key=new THREE.DirectionalLight(0xffffff,2.8); key.position.set(-1.6,3.4,2.6); scene.add(key);
+  const fillL=new THREE.DirectionalLight(0xdfe6f5,0.35); fillL.position.set(1.5,-1.0,1.5); scene.add(fillL);
+  const rim=new THREE.DirectionalLight(0xeaf0ff,1.0); rim.position.set(2.5,-2.5,1.5); scene.add(rim);
+
+  const cc=document.createElement('canvas'); cc.width=cc.height=512; const cg=cc.getContext('2d');
+  const grd=cg.createLinearGradient(0,0,0,512);
+  grd.addColorStop(0,'#dfe6f0'); grd.addColorStop(0.55,'#eef1f6'); grd.addColorStop(1,'#f4f6fa');
+  cg.fillStyle=grd; cg.fillRect(0,0,512,512);
+  const bg=new THREE.Mesh(new THREE.PlaneGeometry(26,26), new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(cc)}));
+  bg.position.z=-6; scene.add(bg);
+
+  // ===== C: ring group =====
+  group=new THREE.Group(); scene.add(group);
+  const cgeo=new THREE.TorusGeometry(R,0.05,30,320);
+  const cp=cgeo.attributes.position, col=[];
+  for(let i=0;i<cp.count;i++){ const a=Math.atan2(cp.getY(i),cp.getX(i)); const c=colorAt(a/(Math.PI*2)+0.5); col.push(c.r,c.g,c.b); }
+  cgeo.setAttribute('color',new THREE.Float32BufferAttribute(col,3));
+  core=new THREE.Mesh(cgeo,new THREE.MeshPhysicalMaterial({ vertexColors:true, color:0xffffff, roughness:0.34, metalness:0,
+    clearcoat:0.35, clearcoatRoughness:0.2, envMapIntensity:0.9 }));
+  coreShader(core.material,R,0.02); group.add(core);
+  const bgeo=new THREE.SphereGeometry(1,28,20);
+  const bmat=new THREE.MeshPhysicalMaterial({ color:0xffffff, metalness:0, roughness:0.0,
+    transmission:1.0, ior:1.2, thickness:0.08, transparent:true, clearcoat:1.0, envMapIntensity:1.4 });
+  for(let i=0;i<5;i++){ const a=Math.random()*Math.PI*2; const rr=R+(Math.random()-0.5)*0.08;
+    const m=new THREE.Mesh(bgeo,bmat); m.position.set(Math.cos(a)*rr,Math.sin(a)*rr,(Math.random()-0.5)*0.1);
+    m.scale.setScalar(0.04+Math.random()*0.05); m.userData={base:m.position.clone(),ph:Math.random()*6}; group.add(m); bubbles.push(m); }
+  const geo=new THREE.TorusGeometry(R,0.12,90,640);
+  mat=new THREE.MeshPhysicalMaterial({ color:0xffffff, metalness:0, roughness:0.02,
+    transmission:1.0, ior:1.33, thickness:0.9, dispersion:1.4,
+    attenuationColor:new THREE.Color(0xeaf0f6), attenuationDistance:8.0,
+    clearcoat:1.0, clearcoatRoughness:0.02, envMapIntensity:1.6, transparent:true });
+  outerShader(mat,R,0.035);
+  torus=new THREE.Mesh(geo,mat); group.add(torus);
+  const sg=new THREE.BufferGeometry();
+  const sp=new Float32Array(SMOKE*3), sc=new Float32Array(SMOKE*3);
+  for(let i=0;i<SMOKE;i++){ const c=new THREE.Color().setHSL(0.62+Math.random()*0.06,0.7,0.55+Math.random()*0.15);
+    sc[i*3]=c.r; sc[i*3+1]=c.g; sc[i*3+2]=c.b; smokeVel.push(new THREE.Vector3()); }
+  sg.setAttribute('position',new THREE.BufferAttribute(sp,3)); sg.setAttribute('color',new THREE.BufferAttribute(sc,3));
+  smokePos=sg.attributes.position;
+  smokeMat=new THREE.PointsMaterial({ size:0.24, map:softTex(), vertexColors:true, transparent:true, opacity:0,
+    depthWrite:false, blending:THREE.NormalBlending, sizeAttenuation:true });
+  smoke=new THREE.Points(sg,smokeMat); group.add(smoke);
+
+  // ===== B: blob group (mass, dual fluid, hover-reactive) =====
+  blobGroup=new THREE.Group(); blobGroup.visible=false; scene.add(blobGroup);
+  const ig=new THREE.SphereGeometry(0.30,64,48);
+  const ip=ig.attributes.position, icol=[];
+  for(let i=0;i<ip.count;i++){ const a=Math.atan2(ip.getZ(i),ip.getX(i)); const c=colorAt(a/(Math.PI*2)+0.5+ip.getY(i)*0.2); icol.push(c.r,c.g,c.b); }
+  ig.setAttribute('color',new THREE.Float32BufferAttribute(icol,3));
+  blobInner=new THREE.Mesh(ig,new THREE.MeshPhysicalMaterial({ vertexColors:true, color:0xffffff, roughness:0.32, metalness:0,
+    clearcoat:0.4, clearcoatRoughness:0.2, envMapIntensity:1.0 }));
+  blobShader(blobInner.material,0.022); blobGroup.add(blobInner);
+  const og=new THREE.SphereGeometry(0.48,96,72);
+  blobOuter=new THREE.Mesh(og,new THREE.MeshPhysicalMaterial({ color:0xffffff, metalness:0, roughness:0.03,
+    transmission:1.0, ior:1.3, thickness:0.5, dispersion:1.4,
+    attenuationColor:new THREE.Color(0xeaf0f6), attenuationDistance:8.0,
+    clearcoat:1.0, clearcoatRoughness:0.03, envMapIntensity:1.6, transparent:true }));
+  blobShader(blobOuter.material,0.05); blobGroup.add(blobOuter);
+
+  composer=new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene,camera));
+  ripplePass=new ShaderPass(RippleShader); ripplePass.uniforms.uAspect.value=innerWidth/innerHeight; composer.addPass(ripplePass);
+
+  clock=new THREE.Clock();
+  addEventListener('resize',onResize);
+  hit.addEventListener('pointerdown',onDown);
+  addEventListener('pointerup',onUp); addEventListener('pointercancel',onUp);
+  addEventListener('pointermove',e=>{ pointer.x=(e.clientX/innerWidth)*2-1; pointer.y=(e.clientY/innerHeight)*2-1; hoverV=1; });
+  document.addEventListener('mouseleave',()=>{ pointer.x=0; pointer.y=0; });
+  document.querySelectorAll('#seg button').forEach(b=>b.addEventListener('click',()=>setCond(b.getAttribute('data-c'))));
+  document.getElementById('dlgOk').addEventListener('click',()=>{ closeDialog(); setText(reveal,'Sent. The dialog barely slowed you down.'); });
+  document.getElementById('dlgCancel').addEventListener('click',()=>{ closeDialog(); setText(reveal,'You closed it. Nothing went out.'); });
+  basicSend.addEventListener('click',()=>{ setText(reveal,'Sent, before you had a moment to reconsider.'); aTimer=performance.now()+2400; });
+  setCond('C');
+}
+function onResize(){ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight); composer.setSize(innerWidth,innerHeight); ripplePass.uniforms.uAspect.value=innerWidth/innerHeight; }
+
+function onDown(e){ if(state!=='idle') return;
+  if(cond==='C'){ hit.setPointerCapture(e.pointerId); state='holding'; holdStart=performance.now(); lastStage=-1; }
+  else if(cond==='B'){ openDialog(); } }
+function commitNow(){ if(state!=='idle') return; state='spreading'; spreadStart=performance.now(); press=1; onCommit(); }
+function openDialog(){ document.getElementById('dialog').style.display='flex'; }
+function closeDialog(){ document.getElementById('dialog').style.display='none'; }
+function setCond(c){ cond=c; closeDialog();
+  document.querySelectorAll('#seg button').forEach(b=>b.classList.toggle('on', b.getAttribute('data-c')===c));
+  group.visible=(c==='C'); blobGroup.visible=(c==='B');
+  document.getElementById('stepbar').style.display=(c==='C')?'flex':'none';
+  document.querySelector('.zone').style.display=(c==='C')?'block':'none';
+  basicSend.style.display=(c==='A')?'block':'none';
+  hit.style.display=(c==='A')?'none':'block';
+  state='idle'; press=0; fillV=0;
+  if(core.material.userData.sh) core.material.userData.sh.uniforms.uThin.value=0;
+  mat.opacity=1; torus.scale.set(1,1,1); smokeMat.opacity=0;
+  blobGroup.scale.set(0.82,0.82,0.82); blobGroup.position.set(0,0,0); blobOuter.material.opacity=1; blobInner.scale.set(1,1,1); blobInner.position.set(0,0,0);
+  zone.textContent='Hold to stay'; zone.style.color='var(--ink-dim)';
+  document.querySelector('.isub').textContent=(c==='A')?'The frictionless default. One tap, already gone.':(c==='B')?'The familiar safeguard: a dialog you click past.':'Three ways to meet that moment. Try each.';
+  setText(reveal,(c==='A')?'One tap and it’s gone. No pause.':(c==='B')?'Click the orb to send to 340 people.':'Hold to see who it reaches, then decide.'); }
+
+function onUp(){ if(state!=='holding') return; state='idle'; streak=0;
+  zone.textContent='Hold to stay'; zone.style.color='var(--ink-dim)';
+  setText(reveal, ABORTS[abortIx % ABORTS.length]); abortIx++; }
+function onCommit(){ streak+=1; if(cond==='C'){ zone.textContent='Sent'; zone.style.color='#3a47c0'; }
+  setText(reveal,(cond==='B')?'Sent. The dialog barely slowed you down.':'It’s out. To all 340, after you stayed.'); rippleActive=true; rippleT=0;
+  for(let i=0;i<SMOKE;i++){ const a=Math.random()*Math.PI*2;
+    smokePos.setXYZ(i,Math.cos(a)*R,Math.sin(a)*R,(Math.random()-0.5)*0.1);
+    smokeVel[i].set(Math.cos(a)*(0.7+Math.random()*0.9),Math.sin(a)*(0.7+Math.random()*0.9),(Math.random()-0.5)*0.5); }
+  smokePos.needsUpdate=true; smokeMat.opacity=(cond==='C')?0.85:0; smokeMat.size=0.20; }
+function resetVisual(){ zone.textContent='Hold to stay'; zone.style.color='var(--ink-dim)';
+  mat.opacity=1; torus.scale.set(1,1,1); smokeMat.opacity=0;
+  blobGroup.scale.set(0.82,0.82,0.82); blobGroup.position.set(0,0,0); blobOuter.material.opacity=1; blobInner.scale.set(1,1,1); blobInner.position.set(0,0,0);
+  setText(reveal,(cond==='B')?'Click the orb to send to 340 people.':'Hold to see who it reaches, then decide.'); }
+
+function animate(){
+  requestAnimationFrame(animate);
+  const now=performance.now(), t=clock.getElapsedTime(), dt=Math.min(clock.getDelta(),0.05);
+  hoverV=Math.max(0,hoverV-dt*1.4);
+
+  if(state==='holding'){
+    const el=now-holdStart, p=Math.min(prog(el,segDur()),1), st=stageOf(p); press=p; fillV=p;
+    zone.textContent=SEGS[st].label; zone.style.color=SEGS[st].color;
+    if(st!==lastStage){ setText(reveal,SEGS[st].text); lastStage=st; }
+    if(p>=1){ state='spreading'; spreadStart=now; onCommit(); }
+  } else if(state==='spreading'){
+    const s=Math.min((now-spreadStart)/2000,1);
+    if(cond==='C'){
+      torus.scale.set(1+s*0.5, 1+s*0.5, Math.max(0.02,1-s*1.5));
+      mat.opacity=Math.max(0,1-Math.max(0,(s-0.45))/0.55);
+      if(core.material.userData.sh) core.material.userData.sh.uniforms.uThin.value=1;
+      for(let i=0;i<SMOKE;i++){ smokePos.setXYZ(i, smokePos.getX(i)+smokeVel[i].x*dt*1.8, smokePos.getY(i)+smokeVel[i].y*dt*1.8, smokePos.getZ(i)+smokeVel[i].z*dt*1.8); }
+      smokePos.needsUpdate=true; smokeMat.opacity=Math.max(0,0.85*(1-s)); smokeMat.size=0.20+s*0.4;
+    } else { // B blob burst
+      blobGroup.scale.setScalar(1+s*0.7); blobOuter.material.opacity=Math.max(0,1-s*1.2); blobInner.scale.setScalar(Math.max(0.001,1-s*1.4));
+    }
+    if(s>=1){ state='idle'; resetVisual(); press=0; fillV=0; }
+  } else { press+=(0-press)*0.08; fillV+=(0-fillV)*0.10; }
+
+  if(state!=='spreading' && cond==='C'){ if(core.material.userData.sh) core.material.userData.sh.uniforms.uThin.value=press; }
+
+  // C ring animations
+  if(group.visible){
+    for(const b of bubbles){ const u=b.userData; b.position.set(u.base.x,u.base.y+Math.sin(t*0.7+u.ph)*0.02,u.base.z+Math.cos(t*0.6+u.ph)*0.015); }
+    if(mat.userData.sh){ mat.userData.sh.uniforms.uTime.value=t; mat.userData.sh.uniforms.uFill.value=fillV; }
+    if(core.material.userData.sh) core.material.userData.sh.uniforms.uTime.value=t;
+    rot.y+=((pointer.x*0.42)-rot.y)*0.06; rot.x+=((-pointer.y*0.30)-rot.x)*0.06;
+    group.rotation.set(rot.x,rot.y,0);
+  }
+  // B blob animations (hover-reactive)
+  if(blobGroup.visible){
+    if(blobOuter.material.userData.sh){ blobOuter.material.userData.sh.uniforms.uTime.value=t; blobOuter.material.userData.sh.uniforms.uReact.value=hoverV; }
+    if(blobInner.material.userData.sh){ blobInner.material.userData.sh.uniforms.uTime.value=t; blobInner.material.userData.sh.uniforms.uReact.value=hoverV; }
+    if(state!=='spreading'){
+      const gx=pointer.x*0.025, gy=-pointer.y*0.025;       // 은은한 전체 드리프트 (겉 유체 반응)
+      blobGroup.position.x+=(gx-blobGroup.position.x)*0.07;
+      blobGroup.position.y+=(gy-blobGroup.position.y)*0.07;
+      const tx=pointer.x*0.06, ty=-pointer.y*0.06;          // magnetic: 안쪽 코어가 커서로 끌림
+      blobInner.position.x+=(tx-blobInner.position.x)*0.12;
+      blobInner.position.y+=(ty-blobInner.position.y)*0.12;
+    }
+  }
+
+  if(rippleActive){ rippleT+=dt; ripplePass.uniforms.uActive.value=1; ripplePass.uniforms.uTime.value=rippleT;
+    if(rippleT>3.2){ rippleActive=false; ripplePass.uniforms.uActive.value=0; } }
+
+  for(let i=0;i<stepFills.length;i++){ const f=Math.max(0,Math.min(1,(press-i/3)*3)); stepFills[i].style.width=(f*100)+'%'; }
+  if(aTimer && now>aTimer){ aTimer=0; setText(reveal,'One tap and it’s gone. No pause.'); }
+
+  composer.render();
+}
+</script>
+</body>
+</html>

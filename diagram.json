@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "author": "friction-commit-device",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "wokwi-arduino-uno", "id": "uno", "top": 0, "left": 0, "attrs": {} },
+    { "type": "wokwi-pushbutton", "id": "btn", "top": -110, "left": 250,
+      "attrs": { "color": "green", "bounce": "1" } },
+    { "type": "wokwi-led", "id": "led", "top": -130, "left": 40,
+      "attrs": { "color": "green" } },
+    { "type": "wokwi-resistor", "id": "r1", "top": -60, "left": 60,
+      "attrs": { "value": "220" } },
+    { "type": "wokwi-potentiometer", "id": "pot", "top": 150, "left": 250, "attrs": {} }
+  ],
+  "connections": [
+    [ "uno:2", "btn:1.l", "green", [] ],
+    [ "btn:2.l", "uno:GND.1", "black", [] ],
+
+    [ "uno:9", "r1:1", "blue", [] ],
+    [ "r1:2", "led:A", "blue", [] ],
+    [ "led:C", "uno:GND.2", "black", [] ],
+
+    [ "pot:GND", "uno:GND.3", "black", [] ],
+    [ "pot:VCC", "uno:5V", "red", [] ],
+    [ "pot:SIG", "uno:A0", "purple", [] ]
+  ]
+}

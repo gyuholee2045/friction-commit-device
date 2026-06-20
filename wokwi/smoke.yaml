@@ -1,0 +1,19 @@
+name: dwell-smoke
+version: 1
+author: friction-commit-device
+
+# 헤드리스 동작 확인용 (wokwi-cli).
+# 흐름: 시리얼 헤더 확인 → 버튼 누르고 1.5초 홀드 → 떼기 → COMMITTED 행 확인.
+# commit 이 홀드 도중 발생하므로, wait-serial(",COMMITTED")을 버튼 누른 '직후' 등록해야
+# 출력을 놓치지 않는다. required(첫 시도 ≤ base800+stake2000=2800ms)는 global --timeout 안에서 도달.
+steps:
+  - wait-serial: "timestamp_ms,event"
+  - set-control:
+      part-id: btn
+      control: pressed
+      value: 1
+  - wait-serial: ",COMMITTED"
+  - set-control:
+      part-id: btn
+      control: pressed
+      value: 0

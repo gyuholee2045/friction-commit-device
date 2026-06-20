@@ -1,0 +1,6 @@
+# Wokwi 시뮬레이터 설정 (VS Code Wokwi 확장에서 사용).
+# 먼저 `pio run -e uno` 로 빌드하면 아래 경로에 firmware 가 생성된다.
+[wokwi]
+version = 1
+firmware = '.pio/build/uno/firmware.hex'
+elf = '.pio/build/uno/firmware.elf'

@@ -1,0 +1,2 @@
+timestamp_ms,event,required_dwell_ms,actual_dwell_ms,impulsivity,outcome
+823,COMMITTED
