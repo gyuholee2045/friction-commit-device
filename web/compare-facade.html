@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>DWELL — compare (façade / click-to-activate)</title>
+<style>
+  /* ── Vercel 호스팅용. Framer Embed > Type: URL 로 이 페이지 주소를 임베드. ──
+     클릭 전엔 iframe이 DOM에 없음 = WebGL/네트워크 부하 0. 전체화면 꽉 채움. */
+  :root{ --bg:#04040A; --muted:#7a86a0; --txt:#eaf0fb; --accent:#3a47c0; }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{ height:100%; background:var(--bg); }
+  .dwell-facade{ position:relative; width:100%; height:100%; overflow:hidden; background:var(--bg);
+    font-family:Inter,ui-sans-serif,system-ui,sans-serif; }
+
+  .poster{ position:absolute; inset:0; cursor:pointer; border:0; padding:0; width:100%; height:100%;
+    background-color:var(--bg); background-size:cover; background-position:center; transition:filter .25s ease;
+    display:flex; align-items:center; justify-content:center; }
+  .poster:hover{ filter:brightness(1.08); }
+  .poster.no-img{ background-image:radial-gradient(120% 120% at 30% 25%, #161a3a 0%, #0a0c1c 45%, #04040A 100%); }
+  .poster::after{ content:""; position:absolute; inset:0; background:linear-gradient(180deg, rgba(4,4,10,.05), rgba(4,4,10,.55)); }
+
+  .play{ position:relative; z-index:2; display:flex; flex-direction:column; align-items:center; gap:14px; text-align:center; }
+  .play .disc{ width:74px; height:74px; border-radius:50%; background:rgba(58,71,192,.92);
+    display:flex; align-items:center; justify-content:center; box-shadow:0 8px 30px rgba(58,71,192,.5); transition:transform .2s ease; }
+  .poster:hover .disc{ transform:scale(1.07); }
+  .play .disc svg{ margin-left:4px; }
+  .play .label{ color:var(--txt); font-size:15px; font-weight:600; letter-spacing:.3px; }
+  .play .sub{ color:var(--muted); font-size:12px; letter-spacing:.4px; }
+
+  .live{ position:absolute; inset:0; width:100%; height:100%; border:0; opacity:0; transition:opacity .3s ease; }
+  .live.in{ opacity:1; }
+</style>
+</head>
+<body>
+<div class="dwell-facade" id="facade">
+  <button class="poster no-img" id="poster" aria-label="Activate live comparison">
+    <span class="play">
+      <span class="disc">
+        <svg width="22" height="24" viewBox="0 0 22 24" fill="none"><path d="M2 2 L20 12 L2 22 Z" fill="#fff"/></svg>
+      </span>
+      <span class="label">Try the live comparison</span>
+      <span class="sub">loads on click — keeps the page light</span>
+    </span>
+  </button>
+</div>
+
+<script>
+// ── 여기만 교체 ──
+const IFRAME_SRC = 'https://friction-commit-device.vercel.app/compare.html';
+const POSTER_IMG = 'https://i.postimg.cc/nrMtZwyr/seukeulinsyas-2026-06-27-145335.png';
+
+const facade=document.getElementById('facade');
+const poster=document.getElementById('poster');
+if(POSTER_IMG){ poster.style.backgroundImage=`url("${POSTER_IMG}")`; poster.classList.remove('no-img'); }
+
+let activated=false;
+function activate(){
+  if(activated) return; activated=true;
+  const f=document.createElement('iframe');
+  f.className='live'; f.src=IFRAME_SRC; f.loading='lazy';
+  f.allow='autoplay; fullscreen';
+  f.setAttribute('title','DWELL live comparison');
+  facade.appendChild(f);
+  f.addEventListener('load',()=>{ f.classList.add('in'); setTimeout(()=>poster.remove(),300); });
+  setTimeout(()=>f.classList.add('in'),600);
+}
+poster.addEventListener('click',activate);
+</script>
+</body>
+</html>
