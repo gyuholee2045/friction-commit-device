@@ -12,3 +12,6 @@ wokwi-cli.exe
 
 # Claude Code internals
 .claude/
+
+.vercel
+.env*
