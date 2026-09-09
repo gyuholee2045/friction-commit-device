@@ -11,7 +11,7 @@
   :root{ --ink:#2a3038; --ink-dim:#717a85; --ink-faint:#9aa3ad; --sans:'Inter',system-ui,sans-serif; }
   *{margin:0;padding:0;box-sizing:border-box}
   html,body{height:100%}
-  body{background:#f1efe9; color:var(--ink); font-family:var(--sans); font-weight:400; overflow:hidden; -webkit-font-smoothing:antialiased}
+  body{background:#eef1f6; color:var(--ink); font-family:var(--sans); font-weight:400; overflow:hidden; -webkit-font-smoothing:antialiased}
   #gl{position:fixed; inset:0; z-index:1; display:block}
   .seg{position:fixed; left:50%; top:4.5vh; transform:translateX(-50%); z-index:5; display:flex; gap:6px; pointer-events:auto}
   .seg button{font:inherit; font-size:11px; letter-spacing:.06em; padding:7px 13px; border-radius:999px; border:1px solid rgba(42,48,56,0.18); background:rgba(255,255,255,0.55); color:var(--ink-dim); cursor:pointer; transition:background .2s,color .2s,border-color .2s}
@@ -23,7 +23,7 @@
   .zone{position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); z-index:3; pointer-events:none}
   /* 중앙 마스크: C(링) 조건에서 물 링 굴절이 중앙에 만드는 초점 잔상을 가림. C에서만 표시(setCond) */
   .cmask{position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); z-index:2; width:30vh; height:30vh; border-radius:50%; pointer-events:none; display:none;
-    background:radial-gradient(circle closest-side, #f1efe9 0%, #f1efe9 52%, rgba(241,239,233,0) 80%)}
+    background:radial-gradient(circle closest-side, #eef1f6 0%, #eef1f6 52%, rgba(238,241,246,0) 80%)}
   .zone .z{font-size:11px; letter-spacing:.2em; text-transform:uppercase; color:var(--ink-dim); transition:color .4s}
   .ui{position:fixed; left:0; right:0; bottom:0; z-index:3; display:flex; justify-content:center; padding:5vh 24px; text-align:center; pointer-events:none}
   .reveal{font-size:18px; line-height:1.55; min-height:52px; max-width:460px; color:var(--ink); opacity:.92; transition:opacity .4s ease}
@@ -73,14 +73,13 @@
 
 <script type="importmap">
 { "imports": {
-  "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
-  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/"
+  "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
 }}
 </script>
 <script type="module">
 import * as THREE from 'three';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
@@ -116,136 +115,42 @@ function softTex(){ const s=128,c=document.createElement('canvas'); c.width=c.he
 const STOPS=['#2730c6','#5a3ad0','#2f8fd0'].map(h=>new THREE.Color(h));
 function colorAt(f){ f=(f%1+1)%1; const n=STOPS.length, x=f*n, i=Math.floor(x), t=x-i; return STOPS[i%n].clone().lerp(STOPS[(i+1)%n],t); }
 
-const R=0.48, TUBE=0.118, CTUBE=0.050, SMOKE=54;
+const R=0.48, SMOKE=54;
 let renderer,scene,camera,composer,ripplePass,torus,mat,core,clock,group,smoke,smokePos,smokeMat;
 let blobGroup,blobOuter,blobInner;
-const smokeVel=[];
+const bubbles=[], smokeVel=[];
 let state='idle', press=0, fillV=0, holdStart=0, spreadStart=0, streak=0, lastStage=-1, cond='C', hoverV=0, aTimer=0;
 let rippleActive=false, rippleT=0;
 const pointer={x:0,y:0}, rot={x:0,y:0};
 
-/* ── shared GLSL: 3D value noise + fbm ───────────────────────────── */
-const NOISE=`
-float hash31(vec3 p){ p=fract(p*0.3183099+vec3(0.11,0.17,0.23)); p*=17.0;
-  return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
-float vnoise(vec3 x){ vec3 i=floor(x), f=fract(x); f=f*f*(3.0-2.0*f);
-  return mix(mix(mix(hash31(i+vec3(0,0,0)),hash31(i+vec3(1,0,0)),f.x),
-                 mix(hash31(i+vec3(0,1,0)),hash31(i+vec3(1,1,0)),f.x),f.y),
-             mix(mix(hash31(i+vec3(0,0,1)),hash31(i+vec3(1,0,1)),f.x),
-                 mix(hash31(i+vec3(0,1,1)),hash31(i+vec3(1,1,1)),f.x),f.y),f.z)*2.0-1.0; }
-float fbm3(vec3 p){ float a=0.5,s=0.0; for(int i=0;i<3;i++){ s+=a*vnoise(p); p*=2.03; a*=0.5; } return s; }
-`;
-
-/* ── water torus: displacement + ANALYTIC normals ─────────────────
-   The whole point: surf(u,v) is a real parametric surface, so we can
-   finite-difference it and hand the rasteriser a normal that actually
-   matches the bumps. That is what makes it read as liquid.          */
-function waterShader(material){
-  const PRE=`
-uniform float uTime; uniform float uFill; uniform float uAmp;
-uniform vec2 uPtr; uniform float uTouch;
-${NOISE}
-const float uR=${R.toFixed(4)};
-const float uT=${TUBE.toFixed(4)};
-vec3 torusN(float u,float v){ float cu=cos(u),su=sin(u),cv=cos(v),sv=sin(v);
-  return vec3(cv*cu, cv*su, sv); }
-// Sampled on a circle so it wraps seamlessly round the ring.
-float ringFbm(float u,float freq,float phase){
-  return fbm3(vec3(cos(u)*freq, sin(u)*freq, phase)); }
-float tubeAt(float u){
-  // The body swells and thins so the base primitive never reads as a rigid
-  // pipe. NOTE the phase advances through the noise volume, NOT around u —
-  // a pattern that travels around a ring reads as pointless rigid rotation.
-  float swell = ringFbm(u, 1.7, 11.0+uTime*0.26)*0.19
-              + ringFbm(u, 3.5, 27.0+uTime*0.17)*0.085;
-  swell *= (1.0-uFill*0.90);            // pulled taut as it fills
-  return uT*(1.0+uFill*0.24)*(1.0+swell+0.055*(-sin(u)));
-}
-vec3 torusP(float u,float v){ float cu=cos(u),su=sin(u),cv=cos(v),sv=sin(v);
-  float t=tubeAt(u); float rr=uR*(1.0+uFill*0.045);
-  return vec3((rr+t*cv)*cu, (rr+t*cv)*su, t*sv); }
-// Seamless (u,v) -> 3D for noise lookups: a small circle of radius rv riding
-// a big circle of radius ru. Periodic in BOTH angles.
-// Feeding raw v into a noise coordinate is a trap: v comes from atan() so it
-// wraps at +-pi, the coordinate jumps ~9 units there, and you get a hard
-// crease plus garbage finite-difference normals along the tube inner equator.
-vec3 tnc(float u,float v,float ru,float rv){
-  float rr=ru+rv*cos(v);
-  return vec3(rr*cos(u), rr*sin(u), rv*sin(v)); }
-float disp(vec3 P,float u,float v){
-  // Detail at three scales, all evolving IN PLACE — real water is fractal,
-  // and a single scale of smooth blobs is what reads as moulded plastic.
-  // w1 varies ACROSS the tube (the v term): those facets are what lens the
-  // coloured core into the wet pebbled look. Two counter-rolling copies, so
-  // the texture boils in place instead of drifting one way round the ring.
-  float a=fbm3(tnc(u,v,4.2,1.45)+vec3(0.0,0.0, uTime*0.28));
-  float b=fbm3(tnc(u,v,4.6,1.30)+vec3(9.0,0.0,-uTime*0.24));
-  float w1=(a+b)*0.5;
-  float w2=fbm3(P*7.6 +vec3(0.0,0.0,uTime*0.50));   // ripple
-  float w3=fbm3(P*16.5+vec3(0.0,0.0,uTime*1.00));   // capillary chatter
-  float base=(w1*0.62+w2*0.26+w3*0.14)*(1.0-uFill*0.93);
-  // The surface answers the cursor: a compact packet of ripples riding under
-  // it. Motion that responds to the user, as opposed to a pattern that merely
-  // spins. Analytic normals mean these ripples actually catch the light.
-  float d=length(P.xy-uPtr);
-  float touch=sin(d*16.0-uTime*1.6)*exp(-d*d*3.6)*uTouch*0.30;
-  return (base+touch)*uAmp;
-}
-vec3 surf(float u,float v){ vec3 P=torusP(u,v); return P+torusN(u,v)*disp(P,u,v); }
-`;
+function outerShader(material, ringR, amp){
   material.onBeforeCompile=(sh)=>{
-    sh.uniforms.uTime={value:0}; sh.uniforms.uFill={value:0}; sh.uniforms.uAmp={value:0.030};
-    sh.uniforms.uPtr={value:new THREE.Vector2(9,9)}; sh.uniforms.uTouch={value:0};
-    material.userData.sh=sh;
-    sh.vertexShader=PRE+sh.vertexShader;
-    sh.vertexShader=sh.vertexShader.replace('#include <beginnormal_vertex>',`
-      float _u=atan(position.y,position.x);
-      vec3 _cd=vec3(cos(_u),sin(_u),0.0);
-      vec3 _d=position-_cd*uR;
-      float _v=atan(_d.z,dot(_d,_cd));
-      vec3 _P0=surf(_u,_v);
-      vec3 _N=normalize(cross(surf(_u+0.010,_v)-_P0, surf(_u,_v+0.010)-_P0));
-      if(dot(_N,torusN(_u,_v))<0.0) _N=-_N;
-      vec3 objectNormal=_N;
-    `);
-    sh.vertexShader=sh.vertexShader.replace('#include <begin_vertex>','vec3 transformed=_P0;');
+    sh.uniforms.uTime={value:0}; sh.uniforms.uFill={value:0}; material.userData.sh=sh;
+    sh.vertexShader='uniform float uTime;uniform float uFill;\n'+sh.vertexShader;
+    sh.vertexShader=sh.vertexShader.replace('#include <begin_vertex>',
+      `#include <begin_vertex>
+       float w=sin(position.x*6.0+uTime*0.9)*0.45+sin(position.y*7.0+uTime*1.3)*0.34+sin(position.z*5.0+uTime*0.7)*0.4
+              +sin(position.x*15.0-uTime*1.7)*0.18+sin(position.y*18.0+uTime*1.2)*0.15+sin(position.z*13.0+uTime*1.5)*0.13;
+       vec3 rdir=normalize(vec3(position.x,position.y,0.0001));
+       vec3 outw=normalize(position-rdir*${ringR.toFixed(3)});
+       float side=dot(outw,rdir);
+       float wr=w*(${amp.toFixed(3)}*(side>0.0?1.0:0.25))*(1.0-uFill*0.85);
+       transformed+=normal*wr + outw*(uFill*0.11*(side>0.0?1.0:0.4));
+       transformed*=(1.0+uFill*0.06);`);
   };
 }
-
-/* ── inner coloured liquid: slower, more viscous, also analytic ──── */
-function coreShader(material){
-  const PRE=`
-uniform float uTime; uniform float uThin; uniform float uAmp;
-${NOISE}
-const float uR=${R.toFixed(4)};
-const float uT=${CTUBE.toFixed(4)};
-vec3 torusN(float u,float v){ float cu=cos(u),su=sin(u),cv=cos(v),sv=sin(v);
-  return vec3(cv*cu,cv*su,sv); }
-vec3 torusP(float u,float v){ float cu=cos(u),su=sin(u),cv=cos(v),sv=sin(v);
-  float t=uT*(1.0-uThin*0.97);
-  return vec3((uR+t*cv)*cu,(uR+t*cv)*su,t*sv); }
-float disp(vec3 P){ return fbm3(P*4.6+vec3(0.0,uTime*0.22,uTime*0.16))*uAmp*(1.0-uThin); }
-vec3 surf(float u,float v){ vec3 P=torusP(u,v); return P+torusN(u,v)*disp(P); }
-`;
+function coreShader(material, ringR, amp){
   material.onBeforeCompile=(sh)=>{
-    sh.uniforms.uTime={value:0}; sh.uniforms.uThin={value:0}; sh.uniforms.uAmp={value:0.006};
-    material.userData.sh=sh;
-    sh.vertexShader=PRE+sh.vertexShader;
-    sh.vertexShader=sh.vertexShader.replace('#include <beginnormal_vertex>',`
-      float _u=atan(position.y,position.x);
-      vec3 _cd=vec3(cos(_u),sin(_u),0.0);
-      vec3 _d=position-_cd*uR;
-      float _v=atan(_d.z,dot(_d,_cd));
-      vec3 _P0=surf(_u,_v);
-      vec3 _N=normalize(cross(surf(_u+0.012,_v)-_P0, surf(_u,_v+0.012)-_P0));
-      if(dot(_N,torusN(_u,_v))<0.0) _N=-_N;
-      vec3 objectNormal=_N;
-    `);
-    sh.vertexShader=sh.vertexShader.replace('#include <begin_vertex>','vec3 transformed=_P0;');
+    sh.uniforms.uTime={value:0}; sh.uniforms.uThin={value:0}; material.userData.sh=sh;
+    sh.vertexShader='uniform float uTime;uniform float uThin;\n'+sh.vertexShader;
+    sh.vertexShader=sh.vertexShader.replace('#include <begin_vertex>',
+      `#include <begin_vertex>
+       float w=sin(position.x*7.0+uTime*1.0)*0.4+sin(position.y*8.0+uTime*1.3)*0.3+sin(position.z*6.0+uTime*0.8)*0.35;
+       vec3 rdir=normalize(vec3(position.x,position.y,0.0001));
+       vec3 toC=rdir*${ringR.toFixed(3)}-position;
+       transformed+=toC*uThin+normal*w*(${amp.toFixed(3)}*(1.0-uThin));`);
   };
 }
-
-
 // blob (B): organic sphere wobble that intensifies on hover (uReact)
 function blobShader(material, amp){
   material.onBeforeCompile=(sh)=>{
@@ -260,97 +165,62 @@ function blobShader(material, amp){
   };
 }
 
-/* ── final grade: commit ripple + chromatic aberration + vignette + grain ── */
-const FinishShader={
-  uniforms:{ tDiffuse:{value:null}, uTime:{value:0}, uActive:{value:0}, uAspect:{value:1}, uClock:{value:0} },
+const RippleShader={
+  uniforms:{ tDiffuse:{value:null}, uTime:{value:0}, uActive:{value:0}, uAspect:{value:1} },
   vertexShader:`varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
   fragmentShader:`
-    uniform sampler2D tDiffuse; uniform float uTime; uniform float uActive; uniform float uAspect; uniform float uClock;
-    varying vec2 vUv;
-    void main(){
-      vec2 uv=vUv; float dark=0.0;
-      if(uActive>0.5){
-        vec2 d=uv-vec2(0.5); d.x*=uAspect; float dist=length(d);
+    uniform sampler2D tDiffuse; uniform float uTime; uniform float uActive; uniform float uAspect; varying vec2 vUv;
+    void main(){ vec2 uv=vUv; float dark=0.0;
+      if(uActive>0.5){ vec2 d=uv-vec2(0.5); d.x*=uAspect; float dist=length(d);
         float front=uTime*0.55; float edge=smoothstep(0.18,0.0,abs(dist-front)); float decay=exp(-uTime*0.55);
-        float wave=sin((dist-front)*42.0)*edge*0.09*decay;
-        vec2 dir=dist>0.0001?normalize(d):vec2(0.0); uv+=dir*wave; dark=edge*decay*0.10;
-      }
-      vec2 c=uv-0.5; float r2=dot(c,c);
-      float ca=0.0009+0.0052*r2;
-      vec3 col;
-      col.r=texture2D(tDiffuse,uv+c*ca).r;
-      col.g=texture2D(tDiffuse,uv).g;
-      col.b=texture2D(tDiffuse,uv-c*ca).b;
-      col-=dark;
-      col*=1.0-0.17*pow(clamp(r2*1.7,0.0,1.0),1.35);
-      float g=fract(sin(dot(uv*vec2(1920.0,1080.0)+uClock*57.0,vec2(12.9898,78.233)))*43758.5453);
-      col+=(g-0.5)*0.011;
-      gl_FragColor=vec4(col,1.0);
-    }`
+        float wave=sin((dist-front)*42.0)*edge*0.09*decay; vec2 dir=dist>0.0001?normalize(d):vec2(0.0); uv+=dir*wave;
+        dark=edge*decay*0.10; }
+      gl_FragColor=vec4(texture2D(tDiffuse,uv).rgb-dark,1.0); }`
 };
 
 try { init(); animate(); } catch(e){ const f=document.getElementById('fallback'); f.style.display='flex'; f.textContent='Error: '+(e&&e.message?e.message:e); console.error(e); }
 
-/* ── a studio: dark room + bright softbox strips.
-      Narrow strips are what give glass its long, sliding highlights. ── */
-function studioEnv(){
-  const s=new THREE.Scene();
-  s.add(new THREE.Mesh(new THREE.BoxGeometry(14,14,14),
-    new THREE.MeshBasicMaterial({side:THREE.BackSide,color:0x39404f})));
-  const box=(w,h,hex,mul,pos,rot)=>{
-    const m=new THREE.MeshBasicMaterial({color:new THREE.Color(hex)});
-    m.color.multiplyScalar(mul);
-    const p=new THREE.Mesh(new THREE.PlaneGeometry(w,h),m);
-    p.position.set(pos[0],pos[1],pos[2]);
-    if(rot) p.rotation.set(rot[0],rot[1],rot[2]);
-    s.add(p); return p;
-  };
-  box(7,7,0xffffff,5.2,[-4.2,3.6,3.0],[0,0.72,0]);        // big key, upper left
-  box(0.7,9,0xeaf2ff,26.0,[5.0,0.4,1.4],[0,-1.02,0]);      // narrow rim strip, right
-  box(0.5,7,0xffffff,17.0,[-1.2,4.6,-2.2],[1.35,0,0.4]);   // top edge streak
-  box(9,4,0xf3f0ea,1.7,[0,-4.6,1.0],[-1.4,0,0]);           // dim bounce from below
-  box(8,6,0xdfe8ff,1.1,[0,0.5,-6.0],[0,0,0]);              // back fill
-  return s;
-}
-
 function init(){
   const canvas=document.getElementById('gl');
   renderer=new THREE.WebGLRenderer({canvas,antialias:true});
-  renderer.setPixelRatio(Math.min(devicePixelRatio,1.85)); renderer.setSize(innerWidth,innerHeight);
-  renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.06;
-  if('transmissionResolutionScale' in renderer) renderer.transmissionResolutionScale=1.0;
-  scene=new THREE.Scene(); scene.background=new THREE.Color(0xf1efe9);
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setSize(innerWidth,innerHeight);
+  renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.08;
+  scene=new THREE.Scene(); scene.background=new THREE.Color(0xeef1f6);
   camera=new THREE.PerspectiveCamera(30,innerWidth/innerHeight,0.1,100); camera.position.set(0,0,4.4);
   const pmrem=new THREE.PMREMGenerator(renderer);
-  scene.environment=pmrem.fromScene(studioEnv(),0.015).texture;
-  const key=new THREE.DirectionalLight(0xffffff,2.7); key.position.set(-1.6,3.4,2.6); scene.add(key);
-  const fillL=new THREE.DirectionalLight(0xdfe6f5,0.30); fillL.position.set(1.5,-1.0,1.5); scene.add(fillL);
-  const rim=new THREE.DirectionalLight(0xeaf0ff,0.9); rim.position.set(2.5,-2.5,1.5); scene.add(rim);
+  scene.environment=pmrem.fromScene(new RoomEnvironment(),0.04).texture;
+  const key=new THREE.DirectionalLight(0xffffff,2.8); key.position.set(-1.6,3.4,2.6); scene.add(key);
+  const fillL=new THREE.DirectionalLight(0xdfe6f5,0.35); fillL.position.set(1.5,-1.0,1.5); scene.add(fillL);
+  const rim=new THREE.DirectionalLight(0xeaf0ff,1.0); rim.position.set(2.5,-2.5,1.5); scene.add(rim);
 
   const cc=document.createElement('canvas'); cc.width=cc.height=512; const cg=cc.getContext('2d');
   const grd=cg.createLinearGradient(0,0,0,512);
-  grd.addColorStop(0,'#e6e1d7'); grd.addColorStop(0.52,'#f1efe9'); grd.addColorStop(1,'#f8f6f1');
+  grd.addColorStop(0,'#dfe6f0'); grd.addColorStop(0.55,'#eef1f6'); grd.addColorStop(1,'#f4f6fa');
   cg.fillStyle=grd; cg.fillRect(0,0,512,512);
   const bg=new THREE.Mesh(new THREE.PlaneGeometry(26,26), new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(cc)}));
   bg.position.z=-6; scene.add(bg);
 
   // ===== C: ring group =====
   group=new THREE.Group(); scene.add(group);
-  const cgeo=new THREE.TorusGeometry(R,CTUBE,40,288);
+  const cgeo=new THREE.TorusGeometry(R,0.05,30,320);
   const cp=cgeo.attributes.position, col=[];
   for(let i=0;i<cp.count;i++){ const a=Math.atan2(cp.getY(i),cp.getX(i)); const c=colorAt(a/(Math.PI*2)+0.5); col.push(c.r,c.g,c.b); }
   cgeo.setAttribute('color',new THREE.Float32BufferAttribute(col,3));
-  core=new THREE.Mesh(cgeo,new THREE.MeshPhysicalMaterial({
-    vertexColors:true, color:0xffffff, roughness:0.30, metalness:0,
-    clearcoat:0.45, clearcoatRoughness:0.18, envMapIntensity:1.0 }));
-  coreShader(core.material); group.add(core);
-  const geo=new THREE.TorusGeometry(R,TUBE,96,512);
-  mat=new THREE.MeshPhysicalMaterial({ color:0xffffff, metalness:0, roughness:0.028,
-    transmission:1.0, ior:1.333, thickness:0.72, dispersion:1.5,
-    attenuationColor:new THREE.Color(0xa9dfec), attenuationDistance:1.45,
-    iridescence:0.34, iridescenceIOR:1.28, iridescenceThicknessRange:[180,620],
-    clearcoat:1.0, clearcoatRoughness:0.015, envMapIntensity:2.1, transparent:true });
-  waterShader(mat);
+  core=new THREE.Mesh(cgeo,new THREE.MeshPhysicalMaterial({ vertexColors:true, color:0xffffff, roughness:0.34, metalness:0,
+    clearcoat:0.35, clearcoatRoughness:0.2, envMapIntensity:0.9 }));
+  coreShader(core.material,R,0.02); group.add(core);
+  const bgeo=new THREE.SphereGeometry(1,28,20);
+  const bmat=new THREE.MeshPhysicalMaterial({ color:0xffffff, metalness:0, roughness:0.0,
+    transmission:1.0, ior:1.2, thickness:0.08, transparent:true, clearcoat:1.0, envMapIntensity:1.4 });
+  for(let i=0;i<5;i++){ const a=Math.random()*Math.PI*2; const rr=R+(Math.random()-0.5)*0.08;
+    const m=new THREE.Mesh(bgeo,bmat); m.position.set(Math.cos(a)*rr,Math.sin(a)*rr,(Math.random()-0.5)*0.1);
+    m.scale.setScalar(0.04+Math.random()*0.05); m.userData={base:m.position.clone(),ph:Math.random()*6}; group.add(m); bubbles.push(m); }
+  const geo=new THREE.TorusGeometry(R,0.12,90,640);
+  mat=new THREE.MeshPhysicalMaterial({ color:0xffffff, metalness:0, roughness:0.02,
+    transmission:1.0, ior:1.33, thickness:0.9, dispersion:1.4,
+    attenuationColor:new THREE.Color(0xeaf0f6), attenuationDistance:8.0,
+    clearcoat:1.0, clearcoatRoughness:0.02, envMapIntensity:1.6, transparent:true });
+  outerShader(mat,R,0.035);
   torus=new THREE.Mesh(geo,mat); group.add(torus);
   const sg=new THREE.BufferGeometry();
   const sp=new Float32Array(SMOKE*3), sc=new Float32Array(SMOKE*3);
@@ -373,17 +243,14 @@ function init(){
   blobShader(blobInner.material,0.022); blobGroup.add(blobInner);
   const og=new THREE.SphereGeometry(0.48,96,72);
   blobOuter=new THREE.Mesh(og,new THREE.MeshPhysicalMaterial({ color:0xffffff, metalness:0, roughness:0.03,
-    transmission:1.0, ior:1.3, thickness:0.5, dispersion:0,   // pinned: inert at r165, kept inert so B does not shift with C
+    transmission:1.0, ior:1.3, thickness:0.5, dispersion:1.4,
     attenuationColor:new THREE.Color(0xeaf0f6), attenuationDistance:8.0,
     clearcoat:1.0, clearcoatRoughness:0.03, envMapIntensity:1.6, transparent:true }));
   blobShader(blobOuter.material,0.05); blobGroup.add(blobOuter);
 
   composer=new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene,camera));
-  composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight),0.16,0.50,0.94));
-  ripplePass=new ShaderPass(FinishShader); ripplePass.uniforms.uAspect.value=innerWidth/innerHeight;
-  composer.addPass(ripplePass);
-  composer.addPass(new OutputPass());
+  ripplePass=new ShaderPass(RippleShader); ripplePass.uniforms.uAspect.value=innerWidth/innerHeight; composer.addPass(ripplePass);
 
   clock=new THREE.Clock();
   addEventListener('resize',onResize);
@@ -452,11 +319,8 @@ function animate(){
   } else if(state==='spreading'){
     const s=Math.min((now-spreadStart)/2000,1);
     if(cond==='C'){
-      const k=Math.max(0.0001,1-s*2.6);
-      torus.scale.set(k,k,k);
-      mat.transmission=Math.max(0.05,1-s*4.0);
-      mat.thickness=0.72*Math.max(0.05,1-s*4.0);
-      mat.opacity=Math.max(0,1-s*3.0);
+      torus.scale.set(1+s*0.5, 1+s*0.5, Math.max(0.02,1-s*1.5));
+      mat.opacity=Math.max(0,1-Math.max(0,(s-0.45))/0.55);
       if(core.material.userData.sh) core.material.userData.sh.uniforms.uThin.value=1;
       for(let i=0;i<SMOKE;i++){ smokePos.setXYZ(i, smokePos.getX(i)+smokeVel[i].x*dt*1.8, smokePos.getY(i)+smokeVel[i].y*dt*1.8, smokePos.getZ(i)+smokeVel[i].z*dt*1.8); }
       smokePos.needsUpdate=true; smokeMat.opacity=Math.max(0,0.85*(1-s)); smokeMat.size=0.20+s*0.4;
@@ -470,6 +334,7 @@ function animate(){
 
   // C ring animations
   if(group.visible){
+    for(const b of bubbles){ const u=b.userData; b.position.set(u.base.x,u.base.y+Math.sin(t*0.7+u.ph)*0.02,u.base.z+Math.cos(t*0.6+u.ph)*0.015); }
     if(mat.userData.sh){ mat.userData.sh.uniforms.uTime.value=t; mat.userData.sh.uniforms.uFill.value=fillV; }
     if(core.material.userData.sh) core.material.userData.sh.uniforms.uTime.value=t;
     rot.y+=((pointer.x*0.42)-rot.y)*0.06; rot.x+=((-pointer.y*0.30)-rot.x)*0.06;
@@ -489,7 +354,6 @@ function animate(){
     }
   }
 
-  ripplePass.uniforms.uClock.value=t;
   if(rippleActive){ rippleT+=dt; ripplePass.uniforms.uActive.value=1; ripplePass.uniforms.uTime.value=rippleT;
     if(rippleT>3.2){ rippleActive=false; ripplePass.uniforms.uActive.value=0; } }
 
