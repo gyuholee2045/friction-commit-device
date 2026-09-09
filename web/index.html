@@ -510,9 +510,13 @@ function animate(){
   group.position.set(mix(REST.x,ENGD.pos[0])+fx,
                      mix(REST.y,ENGD.pos[1])+fy,
                      mix(REST.z,ENGD.pos[2])+fz);
-  group.rotation.set(mix(REST.rot[0],ENGD.rot[0])+frx+rot.x,
-                     mix(REST.rot[1],ENGD.rot[1])+fry+rot.y,
-                     mix(REST.rot[2],ENGD.rot[2]));
+  // As the bar fills, the ring squares up to face you. The tilt is a resting
+  // attitude; committing is something you do head-on. Smoothstep so it eases
+  // in rather than starting to turn the instant you touch it.
+  const upright=fillV*fillV*(3-2*fillV);
+  group.rotation.set((mix(REST.rot[0],ENGD.rot[0])+frx+rot.x)*(1-upright),
+                     (mix(REST.rot[1],ENGD.rot[1])+fry+rot.y)*(1-upright),
+                     (mix(REST.rot[2],ENGD.rot[2]))*(1-upright));
 
   // --- keep the centre-anchored UI glued to wherever the ring actually is --
   _c.set(0,0,0); group.localToWorld(_c); _c.project(camera);
