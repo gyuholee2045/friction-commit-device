@@ -121,6 +121,7 @@ let renderer,scene,camera,composer,ripplePass,torus,mat,core,clock,group,smoke,s
 let blobGroup,blobOuter,blobInner;
 const smokeVel=[];
 let state='idle', press=0, fillV=0, holdStart=0, spreadStart=0, streak=0, lastStage=-1, cond='C', hoverV=0, aTimer=0;
+let hasPtr=false;   // leaving the window resets pointer to 0,0 which IS the blob centre
 let rippleActive=false, rippleT=0;
 const pointer={x:0,y:0}, rot={x:0,y:0};
 
@@ -246,21 +247,38 @@ vec3 surf(float u,float v){ vec3 P=torusP(u,v); return P+torusN(u,v)*disp(P); }
 }
 
 
-// blob (B): organic sphere wobble that intensifies on hover (uReact)
-function blobShader(material, amp){
+// blob (B): a water droplet. Surface tension keeps it nearly spherical, so the
+// deformation is gentle; the realism comes from correct normals plus the
+// material, not from a big wobble.
+function blobShader(material, radius, amp){
+  const PRE=`
+uniform float uTime; uniform float uReact; uniform float uAmp;
+${NOISE}
+const float uR0=${radius.toFixed(4)};
+float bdisp(vec3 q){
+  float w1=fbm3(q*2.6+vec3(0.0,0.0,uTime*0.26));
+  return w1*uAmp*(1.0+uReact*2.6);
+}
+vec3 bsurf(vec3 dir){ vec3 n=normalize(dir); vec3 P=n*uR0; return P+n*bdisp(P); }
+`;
   material.onBeforeCompile=(sh)=>{
-    sh.uniforms.uTime={value:0}; sh.uniforms.uReact={value:0}; material.userData.sh=sh;
-    sh.vertexShader='uniform float uTime;uniform float uReact;\n'+sh.vertexShader;
-    sh.vertexShader=sh.vertexShader.replace('#include <begin_vertex>',
-      `#include <begin_vertex>
-       float w=sin(position.x*3.0+uTime*0.9)*0.5+sin(position.y*3.6+uTime*1.2)*0.4+sin(position.z*2.8+uTime*0.7)*0.45
-              +sin(position.x*8.0-uTime*1.6)*0.18+sin(position.y*9.0+uTime*1.1)*0.15+sin(position.z*7.0+uTime*1.3)*0.13
-              +sin(position.x*16.0+uTime*2.0)*0.08+sin(position.y*18.0-uTime*1.8)*0.07;
-       transformed+=normal*w*(${amp.toFixed(3)}*(1.0+uReact*1.2));`);
+    sh.uniforms.uTime={value:0}; sh.uniforms.uReact={value:0}; sh.uniforms.uAmp={value:amp};
+    material.userData.sh=sh;
+    sh.vertexShader=PRE+sh.vertexShader;
+    sh.vertexShader=sh.vertexShader.replace('#include <beginnormal_vertex>',`
+      vec3 _n=normalize(position);
+      // tangent frame built off the normal, so there is no pole to blow up on
+      vec3 _t1=normalize(abs(_n.y)<0.99 ? cross(vec3(0.0,1.0,0.0),_n) : cross(vec3(1.0,0.0,0.0),_n));
+      vec3 _t2=cross(_n,_t1);
+      vec3 _P0=bsurf(_n);
+      vec3 _N=normalize(cross(bsurf(_n+_t1*0.014)-_P0, bsurf(_n+_t2*0.014)-_P0));
+      if(dot(_N,_n)<0.0) _N=-_N;
+      vec3 objectNormal=_N;
+    `);
+    sh.vertexShader=sh.vertexShader.replace('#include <begin_vertex>','vec3 transformed=_P0;');
   };
 }
 
-/* ── final grade: commit ripple + chromatic aberration + vignette + grain ── */
 const FinishShader={
   uniforms:{ tDiffuse:{value:null}, uTime:{value:0}, uActive:{value:0}, uAspect:{value:1}, uClock:{value:0} },
   vertexShader:`varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
@@ -368,15 +386,15 @@ function init(){
   const ip=ig.attributes.position, icol=[];
   for(let i=0;i<ip.count;i++){ const a=Math.atan2(ip.getZ(i),ip.getX(i)); const c=colorAt(a/(Math.PI*2)+0.5+ip.getY(i)*0.2); icol.push(c.r,c.g,c.b); }
   ig.setAttribute('color',new THREE.Float32BufferAttribute(icol,3));
-  blobInner=new THREE.Mesh(ig,new THREE.MeshPhysicalMaterial({ vertexColors:true, color:0xffffff, roughness:0.32, metalness:0,
-    clearcoat:0.4, clearcoatRoughness:0.2, envMapIntensity:1.0 }));
-  blobShader(blobInner.material,0.022); blobGroup.add(blobInner);
+  blobInner=new THREE.Mesh(ig,new THREE.MeshPhysicalMaterial({ vertexColors:true, color:0xffffff, roughness:0.26, metalness:0,
+    clearcoat:0.45, clearcoatRoughness:0.18, envMapIntensity:1.0 }));
+  blobShader(blobInner.material,0.30,0.012); blobGroup.add(blobInner);
   const og=new THREE.SphereGeometry(0.48,96,72);
-  blobOuter=new THREE.Mesh(og,new THREE.MeshPhysicalMaterial({ color:0xffffff, metalness:0, roughness:0.03,
-    transmission:1.0, ior:1.3, thickness:0.5, dispersion:0,   // pinned: inert at r165, kept inert so B does not shift with C
-    attenuationColor:new THREE.Color(0xeaf0f6), attenuationDistance:8.0,
-    clearcoat:1.0, clearcoatRoughness:0.03, envMapIntensity:1.6, transparent:true }));
-  blobShader(blobOuter.material,0.05); blobGroup.add(blobOuter);
+  blobOuter=new THREE.Mesh(og,new THREE.MeshPhysicalMaterial({ color:0xffffff, metalness:0, roughness:0.02,
+    transmission:1.0, ior:1.333, thickness:0.62, dispersion:1.2,
+    attenuationColor:new THREE.Color(0xbfe6f0), attenuationDistance:2.2,
+    clearcoat:1.0, clearcoatRoughness:0.02, envMapIntensity:1.5, transparent:true }));
+  blobShader(blobOuter.material,0.48,0.020); blobGroup.add(blobOuter);
 
   composer=new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene,camera));
@@ -389,8 +407,8 @@ function init(){
   addEventListener('resize',onResize);
   hit.addEventListener('pointerdown',onDown);
   addEventListener('pointerup',onUp); addEventListener('pointercancel',onUp);
-  addEventListener('pointermove',e=>{ pointer.x=(e.clientX/innerWidth)*2-1; pointer.y=(e.clientY/innerHeight)*2-1; hoverV=1; });
-  document.addEventListener('mouseleave',()=>{ pointer.x=0; pointer.y=0; });
+  addEventListener('pointermove',e=>{ hasPtr=true; pointer.x=(e.clientX/innerWidth)*2-1; pointer.y=(e.clientY/innerHeight)*2-1; });
+  document.addEventListener('mouseleave',()=>{ hasPtr=false; pointer.x=0; pointer.y=0; });
   document.querySelectorAll('#seg button').forEach(b=>b.addEventListener('click',()=>setCond(b.getAttribute('data-c'))));
   document.getElementById('dlgOk').addEventListener('click',()=>{ closeDialog(); setText(reveal,'Sent. The dialog barely slowed you down.'); });
   document.getElementById('dlgCancel').addEventListener('click',()=>{ closeDialog(); setText(reveal,'You closed it. Nothing went out.'); });
@@ -442,7 +460,15 @@ function animate(){
   // old order left dt exactly 0: hover decay never ran, burst particles never
   // moved, and the commit ripple timer stuck on forever.
   const now=performance.now(), dt=Math.min(clock.getDelta(),0.05), t=clock.elapsedTime;
-  hoverV=Math.max(0,hoverV-dt*1.4);
+  // B answers the blob, not the whole window: gate on the cursor actually
+  // being over it. Note pointer 0,0 is the blob centre, so a cursor that has
+  // left the window must not count as a hover.
+  {
+    const half=Math.tan(camera.fov*Math.PI/360)*camera.position.z;
+    const wx=pointer.x*half*camera.aspect, wy=-pointer.y*half;
+    const over=hasPtr && Math.hypot(wx,wy)<0.46;   // outer radius 0.48 x group scale 0.82
+    hoverV+=((over?1:0)-hoverV)*(1-Math.exp(-dt/(over?0.22:0.40)));
+  }
 
   if(state==='holding'){
     const el=now-holdStart, p=Math.min(prog(el,segDur()),1), st=stageOf(p); press=p; fillV=p;
@@ -480,10 +506,10 @@ function animate(){
     if(blobOuter.material.userData.sh){ blobOuter.material.userData.sh.uniforms.uTime.value=t; blobOuter.material.userData.sh.uniforms.uReact.value=hoverV; }
     if(blobInner.material.userData.sh){ blobInner.material.userData.sh.uniforms.uTime.value=t; blobInner.material.userData.sh.uniforms.uReact.value=hoverV; }
     if(state!=='spreading'){
-      const gx=pointer.x*0.025, gy=-pointer.y*0.025;       // 은은한 전체 드리프트 (겉 유체 반응)
+      const gx=pointer.x*0.025*hoverV, gy=-pointer.y*0.025*hoverV;   // 은은한 전체 드리프트
       blobGroup.position.x+=(gx-blobGroup.position.x)*0.07;
       blobGroup.position.y+=(gy-blobGroup.position.y)*0.07;
-      const tx=pointer.x*0.06, ty=-pointer.y*0.06;          // magnetic: 안쪽 코어가 커서로 끌림
+      const tx=pointer.x*0.06*hoverV, ty=-pointer.y*0.06*hoverV;     // magnetic: 안쪽 코어가 커서로 끌림
       blobInner.position.x+=(tx-blobInner.position.x)*0.12;
       blobInner.position.y+=(ty-blobInner.position.y)*0.12;
     }
