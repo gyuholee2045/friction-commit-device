@@ -104,7 +104,7 @@ const R=0.48, TUBE=0.118, CTUBE=0.050, SMOKE=54;
 let renderer,scene,camera,composer,finishPass,bloomPass,torus,mat,core,clock,group,smoke,smokePos,smokeMat,caustic;
 const smokeVel=[];
 let state='idle', press=0, fillV=0, holdStart=0, spreadStart=0, streak=0, lastStage=-1;
-let rippleActive=false, rippleT=0;
+let rippleActive=false, rippleT=0, rippleStart=0;
 const pointer={x:0,y:0}, rot={x:0,y:0};
 // Two resting places. REST: floating off to the side, nearer the camera so it
 // reads bigger. ENGAGED: centred at working size, ready to be held.
@@ -413,13 +413,13 @@ function onUp(){ if(state!=='holding') return; state='idle'; streak=0;
   zone.textContent='Hold to stay'; zone.style.color='var(--ink-dim)';
   setText(reveal, ABORTS[abortIx % ABORTS.length]); abortIx++; }
 function onCommit(){ streak+=1; zone.textContent='Sent'; zone.style.color='#3a47c0';
-  setText(reveal,'It’s out. To all 340 of them.'); rippleActive=true; rippleT=0;
+  setText(reveal,'It’s out. To all 340 of them.'); rippleActive=true; rippleT=0; rippleStart=performance.now();
   for(let i=0;i<SMOKE;i++){ const a=Math.random()*Math.PI*2;
     smokePos.setXYZ(i,Math.cos(a)*R,Math.sin(a)*R,(Math.random()-0.5)*0.1);
     smokeVel[i].set(Math.cos(a)*(0.7+Math.random()*0.9),Math.sin(a)*(0.7+Math.random()*0.9),(Math.random()-0.5)*0.5); }
   smokePos.needsUpdate=true; smokeMat.opacity=0.85; smokeMat.size=0.20; }
 function resetVisual(){ zone.textContent='Hold to stay'; zone.style.color='var(--ink-dim)';
-  mat.opacity=1; mat.transmission=1; mat.thickness=0.72; torus.scale.set(1,1,1); smokeMat.opacity=0;
+  mat.opacity=1; mat.transmission=1; mat.thickness=0.72; torus.scale.set(1,1,1); core.scale.set(1,1,1); smokeMat.opacity=0;
   setText(reveal, engagedNow?IDLE_LINE:REST_PROMPT); }
 
 function animate(){
@@ -442,7 +442,7 @@ function animate(){
     // outward. That also deletes the big lens that was focusing the crescent
     // pair into the middle — which is what the centre mask existed to hide.
     const k=Math.max(0.0001,1-s*2.6);
-    torus.scale.set(k,k,k);
+    torus.scale.set(k,k,k); core.scale.set(k,k,k);   // core leaves with the water, or a wire is left behind
     // Stop it being a lens as it goes. A transmissive ring focuses the
     // background onto its own axis — that is the crescent pair in the middle
     // (the thing the centre mask used to hide), and it is also why the hole
@@ -547,7 +547,7 @@ function animate(){
   zoneEl.style.opacity=uiA.toFixed(3);
   stepEl.style.opacity=uiA.toFixed(3);
 
-  if(rippleActive){ rippleT+=dt; finishPass.uniforms.uActive.value=1; finishPass.uniforms.uTime.value=rippleT;
+  if(rippleActive){ rippleT=(now-rippleStart)/1000;   // real time, locked to the spread finishPass.uniforms.uActive.value=1; finishPass.uniforms.uTime.value=rippleT;
     if(rippleT>6.0){ rippleActive=false; finishPass.uniforms.uActive.value=0; } }
   finishPass.uniforms.uClock.value=t;
 
