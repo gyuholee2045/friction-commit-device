@@ -79,6 +79,7 @@
 </script>
 <script type="module">
 import * as THREE from 'three';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
@@ -205,7 +206,12 @@ vec3 surf(float u,float v){ vec3 P=torusP(u,v); return P+torusN(u,v)*disp(P,u,v)
       vec3 _d=position-_cd*uR;
       float _v=atan(_d.z,dot(_d,_cd));
       vec3 _P0=surf(_u,_v);
-      vec3 _N=normalize(cross(surf(_u+0.010,_v)-_P0, surf(_u,_v+0.010)-_P0));
+      // Guard the degenerate case: where the two tangents are near parallel
+      // the cross product collapses and normalize() returns garbage, which
+      // renders as isolated dark specks. Fall back to the true torus normal.
+      vec3 _cr=cross(surf(_u+0.010,_v)-_P0, surf(_u,_v+0.010)-_P0);
+      float _cl=length(_cr);
+      vec3 _N=_cl>1e-8 ? _cr/_cl : torusN(_u,_v);
       if(dot(_N,torusN(_u,_v))<0.0) _N=-_N;
       vec3 objectNormal=_N;
     `);
@@ -238,7 +244,9 @@ vec3 surf(float u,float v){ vec3 P=torusP(u,v); return P+torusN(u,v)*disp(P); }
       vec3 _d=position-_cd*uR;
       float _v=atan(_d.z,dot(_d,_cd));
       vec3 _P0=surf(_u,_v);
-      vec3 _N=normalize(cross(surf(_u+0.012,_v)-_P0, surf(_u,_v+0.012)-_P0));
+      vec3 _cr=cross(surf(_u+0.012,_v)-_P0, surf(_u,_v+0.012)-_P0);
+      float _cl=length(_cr);
+      vec3 _N=_cl>1e-8 ? _cr/_cl : torusN(_u,_v);
       if(dot(_N,torusN(_u,_v))<0.0) _N=-_N;
       vec3 objectNormal=_N;
     `);
@@ -271,8 +279,8 @@ const FinishShader={
       vec2 uv=vUv; float dark=0.0;
       if(uActive>0.5){
         vec2 d=uv-vec2(0.5); d.x*=uAspect; float dist=length(d);
-        float front=uTime*0.55; float edge=smoothstep(0.18,0.0,abs(dist-front)); float decay=exp(-uTime*0.55);
-        float wave=sin((dist-front)*42.0)*edge*0.09*decay;
+        float front=uTime*0.24; float edge=smoothstep(0.30,0.0,abs(dist-front)); float decay=exp(-uTime*0.34);
+        float wave=sin((dist-front)*26.0)*edge*0.085*decay;
         vec2 dir=dist>0.0001?normalize(d):vec2(0.0); uv+=dir*wave; dark=edge*decay*0.10;
       }
       vec2 c=uv-0.5; float r2=dot(c,c);
@@ -379,6 +387,12 @@ function init(){
     attenuationColor:new THREE.Color(0xeaf0f6), attenuationDistance:8.0,
     clearcoat:1.0, clearcoatRoughness:0.03, envMapIntensity:1.6, transparent:true }));
   blobShader(blobOuter.material,0.05); blobGroup.add(blobOuter);
+  // B renders in the environment it was authored in. The studio rig added for
+  // C uses large soft sources that wash the orb out; RoomEnvironment is what
+  // gave it the small crisp highlights and the deep saturation it had before.
+  // material.envMap overrides scene.environment for these two only.
+  const roomEnv=pmrem.fromScene(new RoomEnvironment(),0.04).texture;
+  blobInner.material.envMap=roomEnv; blobOuter.material.envMap=roomEnv;
 
   composer=new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene,camera));
@@ -418,7 +432,7 @@ function setCond(c){ cond=c; closeDialog();
   hit.style.display=(c==='A')?'none':'block';
   state='idle'; press=0; fillV=0;
   if(core.material.userData.sh) core.material.userData.sh.uniforms.uThin.value=0;
-  mat.opacity=1; torus.scale.set(1,1,1); smokeMat.opacity=0;
+  mat.opacity=1; mat.transmission=1; mat.thickness=0.72; torus.scale.set(1,1,1); smokeMat.opacity=0;
   blobGroup.scale.set(0.82,0.82,0.82); blobGroup.position.set(0,0,0); blobOuter.material.opacity=1; blobInner.scale.set(1,1,1); blobInner.position.set(0,0,0);
   zone.textContent='Hold to stay'; zone.style.color='var(--ink-dim)';
   document.querySelector('.isub').textContent=(c==='A')?'The frictionless default. One tap, already gone.':(c==='B')?'The familiar safeguard: a dialog you click past.':'Three ways to meet that moment. Try each.';
@@ -434,7 +448,7 @@ function onCommit(){ streak+=1; if(cond==='C'){ zone.textContent='Sent'; zone.st
     smokeVel[i].set(Math.cos(a)*(0.7+Math.random()*0.9),Math.sin(a)*(0.7+Math.random()*0.9),(Math.random()-0.5)*0.5); }
   smokePos.needsUpdate=true; smokeMat.opacity=(cond==='C')?0.85:0; smokeMat.size=0.20; }
 function resetVisual(){ zone.textContent='Hold to stay'; zone.style.color='var(--ink-dim)';
-  mat.opacity=1; torus.scale.set(1,1,1); smokeMat.opacity=0;
+  mat.opacity=1; mat.transmission=1; mat.thickness=0.72; torus.scale.set(1,1,1); smokeMat.opacity=0;
   blobGroup.scale.set(0.82,0.82,0.82); blobGroup.position.set(0,0,0); blobOuter.material.opacity=1; blobInner.scale.set(1,1,1); blobInner.position.set(0,0,0);
   setText(reveal,(cond==='B')?'Click the orb to send to 340 people.':'Hold to see who it reaches, then decide.'); }
 
@@ -501,7 +515,7 @@ function animate(){
 
   ripplePass.uniforms.uClock.value=t;
   if(rippleActive){ rippleT+=dt; ripplePass.uniforms.uActive.value=1; ripplePass.uniforms.uTime.value=rippleT;
-    if(rippleT>3.2){ rippleActive=false; ripplePass.uniforms.uActive.value=0; } }
+    if(rippleT>6.0){ rippleActive=false; ripplePass.uniforms.uActive.value=0; } }
 
   for(let i=0;i<stepFills.length;i++){ const f=Math.max(0,Math.min(1,(press-i/3)*3)); stepFills[i].style.width=(f*100)+'%'; }
   if(aTimer && now>aTimer){ aTimer=0; setText(reveal,'One tap and it’s gone. No pause.'); }
