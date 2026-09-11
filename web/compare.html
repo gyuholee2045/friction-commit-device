@@ -440,7 +440,7 @@ function setCond(c){ cond=c; closeDialog();
   hit.style.display=(c==='A')?'none':'block';
   state='idle'; press=0; fillV=0;
   if(core.material.userData.sh) core.material.userData.sh.uniforms.uThin.value=0;
-  mat.opacity=1; mat.transmission=1; mat.thickness=0.72; torus.scale.set(1,1,1); core.scale.set(1,1,1); smokeMat.opacity=0;
+  mat.opacity=1; mat.transmission=1; mat.thickness=0.72; torus.scale.set(1,1,1); core.scale.set(1,1,1); core.visible=true; smokeMat.opacity=0;
   blobGroup.scale.set(0.82,0.82,0.82); blobGroup.position.set(0,0,0); blobOuter.material.opacity=1; blobInner.scale.set(1,1,1); blobInner.position.set(0,0,0);
   zone.textContent='Hold to stay'; zone.style.color='var(--ink-dim)';
   document.querySelector('.isub').textContent=(c==='A')?'The frictionless default. One tap, already gone.':(c==='B')?'The familiar safeguard: a dialog you click past.':'Three ways to meet that moment. Try each.';
@@ -456,7 +456,7 @@ function onCommit(){ streak+=1; if(cond==='C'){ zone.textContent='Sent'; zone.st
     smokeVel[i].set(Math.cos(a)*(0.7+Math.random()*0.9),Math.sin(a)*(0.7+Math.random()*0.9),(Math.random()-0.5)*0.5); }
   smokePos.needsUpdate=true; smokeMat.opacity=(cond==='C')?0.85:0; smokeMat.size=0.20; }
 function resetVisual(){ zone.textContent='Hold to stay'; zone.style.color='var(--ink-dim)';
-  mat.opacity=1; mat.transmission=1; mat.thickness=0.72; torus.scale.set(1,1,1); core.scale.set(1,1,1); smokeMat.opacity=0;
+  mat.opacity=1; mat.transmission=1; mat.thickness=0.72; torus.scale.set(1,1,1); core.scale.set(1,1,1); core.visible=true; smokeMat.opacity=0;
   blobGroup.scale.set(0.82,0.82,0.82); blobGroup.position.set(0,0,0); blobOuter.material.opacity=1; blobInner.scale.set(1,1,1); blobInner.position.set(0,0,0);
   setText(reveal,(cond==='B')?'Click the orb to send to 340 people.':'Hold to see who it reaches, then decide.'); }
 
@@ -484,11 +484,14 @@ function animate(){
   } else if(state==='spreading'){
     const s=Math.min((now-spreadStart)/2000,1);
     if(cond==='C'){
-      const k=Math.max(0.0001,1-s*2.6);
-      torus.scale.set(k,k,k); core.scale.set(k,k,k);   // core leaves with the water, or a wire is left behind
-      mat.transmission=Math.max(0.05,1-s*4.0);
-      mat.thickness=0.72*Math.max(0.05,1-s*4.0);
-      mat.opacity=Math.max(0,1-s*3.0);
+      // The wave: the ring expands outward and flattens into a shockwave that
+      // thins to nothing. This is the approved commit motion -- keep it.
+      torus.scale.set(1+s*0.5, 1+s*0.5, Math.max(0.02,1-s*1.5));
+      mat.opacity=Math.max(0,1-Math.max(0,(s-0.45))/0.55);
+      // The core is already a ~0.5px wire at full press (uThin=1). Left in place
+      // while the water spreads past it, it lingers as a thin band. Remove it for
+      // the duration of the burst only; resetVisual brings it back.
+      core.visible=false;
       if(core.material.userData.sh) core.material.userData.sh.uniforms.uThin.value=1;
       for(let i=0;i<SMOKE;i++){ smokePos.setXYZ(i, smokePos.getX(i)+smokeVel[i].x*dt*1.8, smokePos.getY(i)+smokeVel[i].y*dt*1.8, smokePos.getZ(i)+smokeVel[i].z*dt*1.8); }
       smokePos.needsUpdate=true; smokeMat.opacity=Math.max(0,0.85*(1-s)); smokeMat.size=0.20+s*0.4;
