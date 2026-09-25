@@ -4,6 +4,17 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>DWELL — Three Conditions</title>
+<meta name="description" content="The same send behind three gates: no friction, a confirm dialog, and a hold. Each one measures how long you stayed with who it reaches." />
+<meta name="theme-color" content="#f1efe9" />
+<link rel="icon" href="favicon.svg" type="image/svg+xml" />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://dwelldemo.vercel.app/compare.html" />
+<meta property="og:title" content="DWELL — Three Conditions" />
+<meta property="og:description" content="The same send behind three gates: no friction, a confirm dialog, and a hold. Each one measures how long you stayed with who it reaches." />
+<meta property="og:image" content="https://dwelldemo.vercel.app/og.jpg" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta name="twitter:card" content="summary_large_image" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet" />
@@ -34,6 +45,7 @@
   .ui{position:fixed; left:0; right:0; bottom:0; z-index:3; display:flex; justify-content:center; padding:5vh 24px; text-align:center; pointer-events:none}
   .reveal{font-size:18px; line-height:1.55; min-height:52px; max-width:460px; text-wrap:balance; color:var(--ink); opacity:.92; transition:opacity .4s ease}
   #hit{position:fixed; left:50%; top:50%; width:300px; height:300px; transform:translate(-50%,-50%); border-radius:50%; z-index:4; cursor:pointer; touch-action:none}
+  #basicSend:disabled{opacity:.45; cursor:default}
   #basicSend{position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); z-index:4; display:none; font:inherit; font-size:14px; font-weight:500; padding:12px 24px; border-radius:8px; border:1px solid var(--ink); background:var(--ink); color:#fff; cursor:pointer}
   .stepbar{position:fixed; left:50%; bottom:15vh; transform:translateX(-50%); z-index:3; display:flex; gap:4px; pointer-events:none}
   .stepbar span{display:block; width:80px; height:2px; border-radius:2px; background:rgba(0,0,0,0.22); overflow:hidden}
@@ -549,7 +561,8 @@ function init(){
     if(e.key==='Escape') cancelDlg();
     // two buttons, so keep Tab between them while the dialog is up
     if(e.key==='Tab'){ e.preventDefault(); const ok=document.getElementById('dlgOk'); (document.activeElement===ok?document.getElementById('dlgCancel'):ok).focus(); } });
-  basicSend.addEventListener('click',()=>{ lastDwell=0; commitNow(); });
+  // while it goes out the button shows it is spent, instead of silently ignoring clicks
+  basicSend.addEventListener('click',()=>{ lastDwell=0; basicSend.disabled=true; commitNow(); });
   // keyboard: Space/Enter on the orb or ring works like a press; for C, keep
   // the key down to hold
   hit.addEventListener('keydown',e=>{ if(e.repeat || (e.key!==' ' && e.key!=='Enter')) return; e.preventDefault(); onDown(e); });
@@ -617,7 +630,7 @@ function setCond(c){ cond=c; closeDialog();
   document.getElementById('stepbar').style.display=(c==='C')?'flex':'none';
   document.querySelector('.zone').style.display=(c==='C')?'block':'none';
   document.querySelector('.cmask').style.display=(c==='C')?'block':'none';  // 마스크는 링(C)에서만
-  basicSend.style.display=(c==='A')?'block':'none';
+  basicSend.style.display=(c==='A')?'block':'none'; basicSend.disabled=false;
   hit.style.display=(c==='A')?'none':'block';
   hit.setAttribute('aria-label',(c==='B')?'Send to 340 people':'Hold to send to 340 people');
   state='idle'; press=0; fillV=0;
@@ -646,8 +659,12 @@ function resetVisual(){ zone.textContent='Hold to stay'; zone.style.color='var(-
   blobGroup.scale.set(0.82,0.82,0.82); blobGroup.position.set(0,0,0); blobOuter.visible=true; blobInner.scale.set(1,1,1); blobInner.position.set(0,0,0); blobInner.material=innerMatSolid; innerMatFade.opacity=1; innerMatFade.roughness=0.32; innerMatFade.clearcoat=0.4; innerMatFade.envMapIntensity=1.0; innerBurst=0; blobOuter.material.thickness=0.5; skinBurst=0; reformAt=0;
   // B: rather than reappearing whole, a new drop condenses in place
   if(cond==='B') reformAt=performance.now();
-  // after a send, point to the next step; C is the last one
-  setText(reveal, NEXT[cond] || 'Hold to see who it reaches, then decide.'); }
+  basicSend.disabled=false;
+  // after a send, point to the next step; once all three have been sent, the
+  // last line lays the three times side by side -- the argument in one line
+  const tt=[...document.querySelectorAll('#seg em')].map(e=>e.textContent);
+  const sum=tt.every(Boolean)?'Same send, three gates: '+tt.join(', ')+' with who it reaches.':null;
+  setText(reveal, NEXT[cond] || sum || 'Hold to see who it reaches, then decide.'); }
 
 function animate(){
   requestAnimationFrame(animate);
