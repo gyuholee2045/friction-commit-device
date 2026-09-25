@@ -649,7 +649,9 @@ function onUp(){ if(state!=='holding') return; state='idle'; streak=0;
 function onCommit(){ streak+=1; if(cond==='C'){ zone.textContent='Sent'; zone.style.color='#3a47c0'; }
   const em=document.querySelector('#seg button[data-c="'+cond+'"] em'); em.textContent=fmtS(lastDwell);
   setText(reveal,((cond==='C')?'It’s out. ':'Sent. ')+fmtS(lastDwell)+' with who it reaches.');
-  rippleActive=!RM.matches; rippleT=0; rippleStart=performance.now()+((cond==='B')?B_POP*1000:0);
+  // A is the plain baseline: a send button with no felt consequence -- that
+  // absence IS its point, so it gets no wave. B and C carry the spread.
+  rippleActive=!RM.matches && cond!=='A'; rippleT=0; rippleStart=performance.now()+((cond==='B')?B_POP*1000:0);
   for(let i=0;i<SMOKE;i++){ const a=Math.random()*Math.PI*2;
     smokePos.setXYZ(i,Math.cos(a)*R,Math.sin(a)*R,(Math.random()-0.5)*0.1);
     smokeVel[i].set(Math.cos(a)*(0.7+Math.random()*0.9),Math.sin(a)*(0.7+Math.random()*0.9),(Math.random()-0.5)*0.5); }
