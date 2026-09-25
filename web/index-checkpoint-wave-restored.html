@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet" />
 <style>
-  :root{ --ink:#2a3038; --ink-dim:#5c646f; --ink-faint:#636b76; --sans:'Inter',system-ui,sans-serif; }
+  :root{ --ink:#2a3038; --ink-dim:#717a85; --ink-faint:#9aa3ad; --sans:'Inter',system-ui,sans-serif; }
   *{margin:0;padding:0;box-sizing:border-box}
   html,body{height:100%}
   body{background:#f1efe9; color:var(--ink); font-family:var(--sans); font-weight:400; overflow:hidden; -webkit-font-smoothing:antialiased}
@@ -16,20 +16,17 @@
   .info{position:fixed; left:0; right:0; top:0; z-index:3; display:flex; flex-direction:column; align-items:center; gap:8px; padding:7vh 24px 0; text-align:center; pointer-events:none}
   .eyebrow{font-size:11px; letter-spacing:.28em; text-transform:uppercase; color:var(--ink-faint)}
   .ititle{font-size:21px; font-weight:500; line-height:1.3; max-width:520px}
-  .isub{font-size:14px; color:var(--ink-dim); max-width:430px; line-height:1.5; text-wrap:balance}
+  .isub{font-size:14px; color:var(--ink-dim); max-width:430px; line-height:1.5}
   .zone{position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); z-index:3; pointer-events:none}
   .cmask{position:fixed; left:50%; top:50%; z-index:2; width:26vh; height:26vh; border-radius:50%; pointer-events:none; opacity:0;
     background:radial-gradient(circle closest-side, #f1efe9 0%, #f1efe9 46%, rgba(241,239,233,0) 82%)}
   .zone .z{font-size:11px; letter-spacing:.2em; text-transform:uppercase; color:var(--ink-dim); transition:color .4s}
   .ui{position:fixed; left:0; right:0; bottom:0; z-index:3; display:flex; justify-content:center; padding:5vh 24px; text-align:center; pointer-events:none}
-  .reveal{font-size:18px; line-height:1.55; min-height:52px; max-width:460px; text-wrap:balance; color:var(--ink); opacity:.92; transition:opacity .4s ease}
+  .reveal{font-size:18px; line-height:1.55; min-height:52px; max-width:460px; color:var(--ink); opacity:.92; transition:opacity .4s ease}
   #hit{position:fixed; left:50%; top:50%; width:280px; height:280px; transform:translate(-50%,-50%); border-radius:50%; z-index:4; cursor:pointer; touch-action:none}
   .stepbar{position:fixed; left:50%; bottom:15vh; transform:translateX(-50%); z-index:3; display:flex; gap:4px; pointer-events:none}
   .stepbar span{display:block; width:80px; height:2px; border-radius:2px; background:rgba(0,0,0,0.22); overflow:hidden}
   .stepbar i{display:block; height:100%; width:0%; background:rgba(255,255,255,0.95); border-radius:2px}
-  #hit:focus-visible, .xlink:focus-visible{outline:2px solid #3a47c0; outline-offset:4px}
-  .xlink{position:fixed; top:18px; right:22px; z-index:5; font-size:12px; letter-spacing:.02em; color:var(--ink-dim); text-decoration:none; padding:6px 2px}
-  .xlink:hover{color:var(--ink); text-decoration:underline; text-underline-offset:3px}
   .fallback{position:fixed; inset:0; z-index:5; display:none; align-items:center; justify-content:center; color:#888; font-size:14px; padding:40px; text-align:center}
 </style>
 </head>
@@ -44,9 +41,7 @@
   <div class="zone"><span class="z" id="zone">Hold to stay</span></div>
   <div class="stepbar" id="stepbar"><span><i></i></span><span><i></i></span><span><i></i></span></div>
   <div class="ui"><div class="reveal" id="reveal">Hold to stay</div></div>
-  <div id="hit" tabindex="0" role="button" aria-label="Hold to send to 340 people"></div>
-  <!-- the hero shows one way; the argument is the comparison. Hidden when framed. -->
-  <a class="xlink" id="xlink" href="compare.html">Compare three conditions →</a>
+  <div id="hit"></div>
   <div class="fallback" id="fallback">This experience needs WebGL.</div>
 
 <script type="importmap">
@@ -110,8 +105,6 @@ let renderer,scene,camera,composer,finishPass,bloomPass,torus,mat,core,clock,gro
 const smokeVel=[];
 let state='idle', press=0, fillV=0, holdStart=0, spreadStart=0, streak=0, lastStage=-1;
 let rippleActive=false, rippleT=0, rippleStart=0;
-const RM=matchMedia('(prefers-reduced-motion: reduce)');   // no full-screen wave, no idle drift
-let viewS=1;
 const pointer={x:0,y:0}, rot={x:0,y:0};
 // Two resting places. REST: floating off to the side, nearer the camera so it
 // reads bigger. ENGAGED: centred at working size, ready to be held.
@@ -277,69 +270,26 @@ const CausticMat=()=>new THREE.ShaderMaterial({
 
 /* ── final grade: commit ripple + chromatic aberration + vignette + grain ── */
 const FinishShader={
-  uniforms:{ tDiffuse:{value:null}, uTime:{value:0}, uActive:{value:0}, uAspect:{value:1}, uClock:{value:0},
-             uCenter:{value:new THREE.Vector2(0.5,0.5)}, uR0:{value:0.2} },
+  uniforms:{ tDiffuse:{value:null}, uTime:{value:0}, uActive:{value:0}, uAspect:{value:1}, uClock:{value:0} },
   vertexShader:`varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
   fragmentShader:`
     uniform sampler2D tDiffuse; uniform float uTime; uniform float uActive; uniform float uAspect; uniform float uClock;
-    uniform vec2 uCenter; uniform float uR0;
     varying vec2 vUv;
-    // The commit burst is a liquid surface, not a 2D overlay: a height field
-    // h(r,θ,t) the whole frame is seen THROUGH. The offset follows the slope
-    // (that is how water bends what is under it) and the slope is lit, so
-    // crests catch the key light and back faces shade.
-    // Front: punches out of the ring fast, then keeps spreading slowly off
-    // every edge -- slightly ragged, because liquid never ruptures evenly.
-    float frontR(float th,float t){
-      float rag=(0.022*sin(th*3.0+1.3)+0.014*sin(th*5.0-0.4)+0.008*sin(th*9.0+2.1))*min(t*1.5,1.0);
-      return uR0+0.55*(1.0-exp(-t*1.4))+0.17*t+rag;
-    }
-    float hgt(float r,float th,float t){
-      float f=frontR(th,t), x=r-f;
-      // energy thins as the ring grows (circular spreading) and bleeds away
-      float amp=smoothstep(0.0,0.08,t)*exp(-t*0.42)/sqrt(1.0+f*2.2);
-      // sharp leading crest, then a train of ripples left behind it whose
-      // wavelength shortens back toward the source
-      float env=x>0.0?exp(-x*x/0.0035):exp(x/0.45);
-      float wv=cos(x*(18.0-x*10.0))*env*amp;
-      // the burst point itself dips, rebounds and settles
-      float bob=exp(-r*r/(uR0*uR0*1.4))*cos(t*8.0)*exp(-t*1.3)*smoothstep(0.0,0.05,t);
-      return wv+bob*2.6;
-    }
     void main(){
-      vec2 uv=vUv; vec2 off=vec2(0.0); float shade=0.0, spec=0.0, body=0.0, caus=0.0;
+      vec2 uv=vUv; float dark=0.0;
       if(uActive>0.5){
-        float t=uTime, fade=smoothstep(6.0,4.2,t);
-        // the whole surface gives once and rebounds -- the viewport bounce
-        float bnc=0.010*sin(t*7.0)*exp(-t*1.4)*smoothstep(0.0,0.04,t)*fade;
-        uv=uCenter+(uv-uCenter)*(1.0-bnc);
-        vec2 d=uv-uCenter; d.x*=uAspect; float r=length(d);
-        vec2 dir=r>0.0001?d/r:vec2(0.0); float th=atan(d.y,d.x);
-        const float e=0.0025;
-        float hp=hgt(r+e,th,t), h0=hgt(r,th,t), hm=hgt(r-e,th,t);
-        float s=(hp-hm)/(2.0*e)*fade;
-        // crests focus light into bright lines, troughs spread it thin -- the
-        // caustic that makes a wave read as water on a plain surface
-        caus=clamp(-(hp-2.0*h0+hm)/(e*e)*0.00070*fade,-0.22,0.24);
-        vec2 g=dir*s; g.x/=uAspect;               // back to uv units
-        off=-g*0.0020;
-        vec3 n=normalize(vec3(-dir*s*0.030,1.0));
-        vec3 L=normalize(vec3(-0.45,0.75,0.95)), H=normalize(L+vec3(0.0,0.0,1.0));
-        shade=dot(n,L)-L.z;                       // relative to a flat surface
-        spec=pow(max(dot(n,H),0.0),70.0)-pow(H.z,70.0);
-        // where the swell stands tall the ring's own water tints the frame:
-        // the liquid itself is what spreads outward
-        body=max(h0,0.0)*fade;
+        vec2 d=uv-vec2(0.5); d.x*=uAspect; float dist=length(d);
+        float front=uTime*0.24; float edge=smoothstep(0.30,0.0,abs(dist-front)); float decay=exp(-uTime*0.34);
+        float wave=sin((dist-front)*26.0)*edge*0.085*decay;
+        vec2 dir=dist>0.0001?normalize(d):vec2(0.0); uv+=dir*wave; dark=edge*decay*0.10;
       }
       vec2 c=uv-0.5; float r2=dot(c,c);
       float ca=0.0009+0.0052*r2;
       vec3 col;
-      // the slope splits the channels a little, as real water does
-      col.r=texture2D(tDiffuse,uv+off*0.93+c*ca).r;
-      col.g=texture2D(tDiffuse,uv+off).g;
-      col.b=texture2D(tDiffuse,uv+off*1.08-c*ca).b;
-      col+=shade*1.40+spec*0.55+caus;
-      col=mix(col,col*vec3(0.80,0.92,0.96),clamp(body*0.30,0.0,0.40));
+      col.r=texture2D(tDiffuse,uv+c*ca).r;
+      col.g=texture2D(tDiffuse,uv).g;
+      col.b=texture2D(tDiffuse,uv-c*ca).b;
+      col-=dark;
       col*=1.0-0.17*pow(clamp(r2*1.7,0.0,1.0),1.35);
       float g=fract(sin(dot(uv*vec2(1920.0,1080.0)+uClock*57.0,vec2(12.9898,78.233)))*43758.5453);
       col+=(g-0.5)*0.011;
@@ -378,8 +328,7 @@ function init(){
   if('transmissionResolutionScale' in renderer) renderer.transmissionResolutionScale=1.0;
 
   scene=new THREE.Scene(); scene.background=new THREE.Color(0xf1efe9);
-  camera=new THREE.PerspectiveCamera(30,innerWidth/innerHeight,0.1,100); camera.position.set(0,0,4.4); fitView();
-  if(window.self!==window.top) document.getElementById('xlink').style.display='none';
+  camera=new THREE.PerspectiveCamera(30,innerWidth/innerHeight,0.1,100); camera.position.set(0,0,4.4);
 
   const pmrem=new THREE.PMREMGenerator(renderer);
   scene.environment=pmrem.fromScene(studioEnv(),0.015).texture;
@@ -451,30 +400,20 @@ function init(){
   addEventListener('resize',onResize);
   hit.addEventListener('pointerdown',onDown);
   addEventListener('pointerup',onUp); addEventListener('pointercancel',onUp);
-  // keyboard: keep Space/Enter down on the ring to hold
-  hit.addEventListener('keydown',e=>{ if(e.repeat || (e.key!==' ' && e.key!=='Enter')) return; e.preventDefault(); onDown(e); });
-  hit.addEventListener('keyup',e=>{ if(e.key===' ' || e.key==='Enter') onUp(); });
   addEventListener('pointermove',e=>{ hasPtr=true; pointer.x=(e.clientX/innerWidth)*2-1; pointer.y=(e.clientY/innerHeight)*2-1; });
   document.addEventListener('mouseleave',()=>{ hasPtr=false; pointer.x=0; pointer.y=0; });
 }
-// Portrait screens: widen the view instead of letting the ring run off both
-// sides (even the nearer, floating one). Landscape keeps 30deg exactly; the DOM
-// hit area and mask are scaled by viewS so they stay on the ring.
-function fitView(){
-  const t0=Math.tan(15*Math.PI/180), t=Math.max(t0, 0.225/camera.aspect);
-  camera.fov=2*Math.atan(t)*180/Math.PI; camera.updateProjectionMatrix(); viewS=t0/t;
-}
-function onResize(){ camera.aspect=innerWidth/innerHeight; fitView();
+function onResize(){ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(innerWidth,innerHeight); composer.setSize(innerWidth,innerHeight);
   bloomPass.setSize(innerWidth,innerHeight);
   finishPass.uniforms.uAspect.value=innerWidth/innerHeight; }
 
-function onDown(e){ if(state!=='idle') return; if(e.pointerId!==undefined) hit.setPointerCapture(e.pointerId); state='holding'; holdStart=performance.now(); lastStage=-1; }
+function onDown(e){ if(state!=='idle') return; hit.setPointerCapture(e.pointerId); state='holding'; holdStart=performance.now(); lastStage=-1; }
 function onUp(){ if(state!=='holding') return; state='idle'; streak=0;
   zone.textContent='Hold to stay'; zone.style.color='var(--ink-dim)';
   setText(reveal, ABORTS[abortIx % ABORTS.length]); abortIx++; }
 function onCommit(){ streak+=1; zone.textContent='Sent'; zone.style.color='#3a47c0';
-  setText(reveal,'It’s out. To all 340 of them.'); rippleActive=!RM.matches; rippleT=0; rippleStart=performance.now();
+  setText(reveal,'It’s out. To all 340 of them.'); rippleActive=true; rippleT=0; rippleStart=performance.now();
   for(let i=0;i<SMOKE;i++){ const a=Math.random()*Math.PI*2;
     smokePos.setXYZ(i,Math.cos(a)*R,Math.sin(a)*R,(Math.random()-0.5)*0.1);
     smokeVel[i].set(Math.cos(a)*(0.7+Math.random()*0.9),Math.sin(a)*(0.7+Math.random()*0.9),(Math.random()-0.5)*0.5); }
@@ -563,7 +502,7 @@ function animate(){
     if(state==='idle') setText(reveal, engagedNow?IDLE_LINE:REST_PROMPT); }
 
   // --- idle drift, damped out as it engages -------------------------------
-  const fl=(1-eng)*(RM.matches?0:1);
+  const fl=1-eng;
   const fx=Math.sin(t*0.37+1.1)*0.030*fl, fy=Math.sin(t*0.55)*0.045*fl, fz=Math.sin(t*0.29+2.3)*0.040*fl;
   const frx=Math.sin(t*0.31)*0.055*fl,    fry=Math.cos(t*0.26)*0.070*fl;
 
@@ -593,21 +532,15 @@ function animate(){
   cmaskEl.style.opacity=maskA.toFixed(3);
   cmaskEl.style.left=sx+'px'; cmaskEl.style.top=sy+'px';
   cmaskEl.style.transform='translate(-50%,-50%) rotate('+(group.rotation.z*57.2958).toFixed(2)+
-    'deg) scaleY('+Math.max(0.16,Math.cos(group.rotation.x)).toFixed(3)+') scale('+(sc*viewS).toFixed(3)+')';
+    'deg) scaleY('+Math.max(0.16,Math.cos(group.rotation.x)).toFixed(3)+') scale('+sc.toFixed(3)+')';
   hit.style.left=sx+'px';     hit.style.top=sy+'px';
-  hit.style.transform='translate(-50%,-50%) scale('+(sc*viewS).toFixed(3)+')';
+  hit.style.transform='translate(-50%,-50%) scale('+sc.toFixed(3)+')';
   // the hold prompt only asserts itself once the ring has come to meet you
   const uiA=Math.max(0,(eng-0.30)/0.70);
   zoneEl.style.opacity=uiA.toFixed(3);
   stepEl.style.opacity=uiA.toFixed(3);
 
-  // (The comment used to sit mid-line here and swallowed the two assignments
-  // after it -- the wave never switched on. Keep statements before comments.)
-  if(rippleActive){ rippleT=(now-rippleStart)/1000;   // real time, locked to the spread
-    finishPass.uniforms.uActive.value=1; finishPass.uniforms.uTime.value=rippleT;
-    // the wave starts where the ring burst: its centre and its on-screen radius
-    finishPass.uniforms.uCenter.value.set(sx/innerWidth, 1-sy/innerHeight);
-    finishPass.uniforms.uR0.value=R/(2*Math.tan(camera.fov*Math.PI/360)*(camera.position.z-group.position.z));
+  if(rippleActive){ rippleT=(now-rippleStart)/1000; finishPass.uniforms.uActive.value=1; finishPass.uniforms.uTime.value=rippleT;   // real time, locked to the spread
     if(rippleT>6.0){ rippleActive=false; finishPass.uniforms.uActive.value=0; } }
   finishPass.uniforms.uClock.value=t;
 

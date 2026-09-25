@@ -5,7 +5,13 @@ friction-commit-device의 **UX 트랙** 산출물. 두 버전을 따로 관리�
 | 파일 | 정체 | 용도 |
 |---|---|---|
 | **index.html** | **C 단독 — 히어로 (부유 → 착지 → 홀드)** | 기본은 중앙에 크게 기울어져 부유. 커서가 화면 중앙에 오면 작업 사이즈로 착지하고 홀드 가능. 꾹 눌러 단계 채움 → 확산. |
-| **compare.html** | **A/B/C 3조건 비교** (상단 토글) | 연구 완결형. A 마찰없음(평범 버튼·즉시) / B 화면마찰(덩어리 블롭·마그네틱 호버·확인팝업) / C 물리마찰(링 홀드). |
+| **compare.html** | **A/B/C 3조건 비교** (상단 번호 탭 1→2→3, 1에서 시작) | 연구 완결형. A 마찰없음(평범 버튼) / B 화면마찰(유리 오브 + 오브에서 펼쳐지는 확인창) / C 물리마찰(링 홀드). 세 조건 모두 보내면 같은 파동이 퍼지고, "누구에게 가는지"를 본 시간이 탭에 기록된다. |
+| index-checkpoint-wave-restored.html | 커밋 파동 버그만 고친 이전 파동 | 파동 재작성(D-036) 비교용. |
+| index-checkpoint-wave-approved.html | 새 파동 승인 시점 index.html | 모바일 맞춤·키보드·비교 링크 추가 **직전**. |
+| compare-checkpoint-b-egg.html | B 레퍼런스 반영 직전 | "계란후라이" B. |
+| compare-checkpoint-b-fill.html | B 안 1(꽉 채움), 리퀴드 글래스 전 | 안 2 채택으로 보관. |
+| compare-checkpoint-b-roll.html | B 안 2 확정 시점 compare.html | B 인터랙션·IA 개편 **직전**. |
+| index-checkpoint-approved-0925.html / compare-checkpoint-approved-0925.html | 개편 완료 승인본 (2026-09-25) | B 터짐 연출(풀려서 흩어짐) 반영 **직전**. 되돌리려면 이것. |
 | index-checkpoint-waterring.html | C 초기 승인본 백업 (r165) | 작업 꼬이면 복구용. |
 | **index-checkpoint-glossy-tube.html** | **교체 직전 index.html 백업 (r165)** | 광택 튜브 버전. 링 교체를 되돌리려면 이걸 index.html 로 덮어쓰기. |
 | **index-checkpoint-pebbled.html** | 차가운 배경 + 자갈질감 백업 | 배경 온도 변경·커서 물결 도입 **직전** 상태. |
