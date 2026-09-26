@@ -17,6 +17,7 @@ friction-commit-device의 **UX 트랙** 산출물. 두 버전을 따로 관리�
 | **index-checkpoint-pebbled.html** | 차가운 배경 + 자갈질감 백업 | 배경 온도 변경·커서 물결 도입 **직전** 상태. |
 | **index-checkpoint-warm-touch.html** | **웹포폴에 실제 적용됐던 index.html** | 정면 고정 구도 버전. 부유/착지 도입 **직전**. 미디어 소스(GIF·영상) 촬영 때 원본이 필요하면 이것. |
 | index-float-engage.html | 히어로 작업본 | 현재 index.html 과 동일 내용. |
+| compare-facade.html (+ facade/) | Framer 임베드용 입구 페이지 | 1·2·3 장면 + "Try the live comparison". 클릭 시에만 compare.html 로드. 배경은 데모가 실제 렌더하는 #e1e1e0. 옛 버전: compare-facade-checkpoint-old.html |
 | favicon.svg / og.jpg | 탭 아이콘 · 링크 미리보기 이미지(1200x630) | 두 페이지 <head>의 og:image가 og.jpg 절대주소를 가리킴. |
 | index-realistic-fluid.html | 링 후보 A — 물결 집중 | 진행성 물결·몸통 스웰 최대. 사실적이지만 번잡. 보관용. |
 | index-realistic.html | 링 후보 B — 볼륨 집중 | 그라디언트 깨끗하나 파이프 느낌 잔존. 보관용. |
