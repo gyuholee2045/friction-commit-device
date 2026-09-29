@@ -640,7 +640,7 @@ function setCond(c){ cond=c; closeDialog();
   zone.textContent='Hold to stay'; zone.style.color='var(--ink-dim)';
   // The subtitle names the mechanism, never the verdict: the verdict is the
   // time you actually give it, measured when you send.
-  document.querySelector('.isub').textContent=(c==='A')?'The default. One tap sends it.':(c==='B')?'The familiar safeguard. A dialog asks if you’re sure.':'Tangible friction. You stay with it while the cost comes up.';
+  document.querySelector('.isub').textContent=(c==='A')?'The default. One tap sends it.':(c==='B')?'The familiar safeguard. A dialog asks if you’re sure.':'Tangible friction. You keep holding while it shows who the email reaches.';
   setText(reveal,(c==='A')?'Tap to send it to 340 people.':(c==='B')?'Click the orb to send to 340 people.':'Hold to see who it reaches, then decide.'); }
 
 function onUp(){ if(state!=='holding') return; state='idle'; streak=0;
